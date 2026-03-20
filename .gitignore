@@ -42,3 +42,5 @@ Thumbs.db
 tests/test-1/review-pdfs/*
 !tests/test-1/review-pdfs/.gitkeep
 tests/test-1/.review-chunk-state.json
+tests/test-1/transcriptions/*
+!tests/test-1/transcriptions/.gitkeep

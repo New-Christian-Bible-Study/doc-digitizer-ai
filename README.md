@@ -54,3 +54,27 @@ asciidoctor-pdf tests/test-1/test-b.adoc -o tests/test-1/scan-pdfs/test-b.pdf
 ```bash
 pytest -q
 ```
+
+## Transcribe a review PDF
+
+Use Gemini through LiteLLM to transcribe a file from `review-pdfs/` into
+`transcriptions/<review_pdf_stem>.md`.
+
+```bash
+export GEMINI_API_KEY=...
+python transcribe-review-pdf.py \
+  --working-dir tests/test-1 \
+  --review-pdf test-a_001-003.pdf \
+  --prompt-md tests/test-1/prompt.md
+```
+
+Notes:
+- `transcriptions/` is created automatically if it does not exist.
+- `--review-pdf` must be a filename only (no path).
+- `--out-json <path>` optionally saves validated full JSON response.
+
+Live integration test:
+
+```bash
+pytest -q -k transcribe_review_pdf
+```

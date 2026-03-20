@@ -1,0 +1,8 @@
+OCR Stress Test
+Small Font Test
+This is 4pt text.
+This is 3pt text.
+This is 2pt text. Most standard OCRs will fail here.
+Low Contrast Test
+This is very light grey text (Hex #EEEEEE) on a white background.
+1

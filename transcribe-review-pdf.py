@@ -5,11 +5,16 @@ import base64
 import json
 import os
 import re
+import shutil
 import sys
+import termios
+import tty
 from pathlib import Path
 
 import jsonschema
 from litellm import completion
+
+from review_pdf_generator import ReviewPdfGenerator
 
 DEFAULT_MODEL = 'gemini/gemini-2.5-flash'
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -63,6 +68,136 @@ def resolve_review_pdf(working_dir: Path, review_pdf_filename: str) -> Path:
     return review_pdf_path
 
 
+def prompt_with_default(label: str, default: str) -> str:
+    prompt = f'{label} [{default}]: ' if default else f'{label}: '
+    value = input(prompt).strip()
+    return value if value else default
+
+
+def list_review_pdf_filenames(review_dir: Path) -> list[str]:
+    if not review_dir.exists() or not review_dir.is_dir():
+        return []
+    return sorted(
+        file_path.name
+        for file_path in review_dir.iterdir()
+        if file_path.is_file() and file_path.suffix.lower() == '.pdf'
+    )
+
+
+def truncate_for_terminal(text: str, max_width: int) -> str:
+    if max_width <= 0:
+        return ''
+    if len(text) <= max_width:
+        return text
+    if max_width <= 3:
+        return text[:max_width]
+    return f'{text[:max_width - 3]}...'
+
+
+def prompt_select_filename(label: str, default: str, options: list[str]) -> str:
+    if not options:
+        return prompt_with_default(label, default)
+
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        while True:
+            selected = prompt_with_default(label, default)
+            if selected in options:
+                return selected
+            print(f"Please choose one of: {', '.join(options)}")
+
+    selected_index = options.index(default) if default in options else 0
+
+    def render():
+        columns = shutil.get_terminal_size(fallback=(80, 24)).columns
+        content_width = max(10, columns - 2)
+        sys.stdout.write('\x1b[2J\x1b[H')
+        sys.stdout.write(f'Select {label} with up/down arrows and press Enter:\n\n')
+        for index, option in enumerate(options):
+            prefix = '> ' if index == selected_index else '  '
+            display_name = truncate_for_terminal(option, content_width)
+            sys.stdout.write(f'{prefix}{display_name}\n')
+        sys.stdout.write('\nPress Ctrl+C to cancel.\n')
+        sys.stdout.flush()
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while True:
+            render()
+            key = sys.stdin.read(1)
+            if key in ('\r', '\n'):
+                sys.stdout.write('\x1b[2J\x1b[H')
+                selected = options[selected_index]
+                sys.stdout.write(f'{label}: {selected}\n')
+                sys.stdout.flush()
+                return selected
+            if key == '\x03':
+                raise KeyboardInterrupt
+            if key == '\x1b':
+                next_one = sys.stdin.read(1)
+                next_two = sys.stdin.read(1)
+                if next_one == '[':
+                    if next_two == 'A':
+                        selected_index = (selected_index - 1) % len(options)
+                    elif next_two == 'B':
+                        selected_index = (selected_index + 1) % len(options)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def resolve_review_pdf_filename(working_dir: Path) -> str:
+    review_dir = working_dir / 'review-pdfs'
+    review_filenames = list_review_pdf_filenames(review_dir)
+
+    state = {}
+    try:
+        state = ReviewPdfGenerator(working_dir=working_dir).load_state()
+    except ValueError:
+        state = {}
+
+    last_generated = state.get('last_generated_output')
+    default_filename = ''
+    if isinstance(last_generated, str) and last_generated.strip():
+        default_filename = Path(last_generated).name
+    if default_filename not in review_filenames:
+        default_filename = review_filenames[0] if review_filenames else default_filename
+
+    if not review_filenames:
+        print(
+            f'No PDF files found in {review_dir}. '
+            'Falling back to manual filename entry.'
+        )
+
+    return prompt_select_filename(
+        label='Review PDF filename',
+        default=default_filename,
+        options=review_filenames,
+    )
+
+
+def resolve_prompt_md(working_dir: Path) -> Path:
+    prompt_candidates = sorted(
+        path for path in working_dir.glob('*prompt*.md') if path.is_file()
+    )
+    if not prompt_candidates:
+        raise ValueError(
+            f'No prompt markdown files found in {working_dir} matching *prompt*.md'
+        )
+
+    if len(prompt_candidates) == 1:
+        return prompt_candidates[0]
+
+    prompt_names = [path.name for path in prompt_candidates]
+    default_name = 'prompt.md' if 'prompt.md' in prompt_names else prompt_names[0]
+    selected_name = prompt_select_filename(
+        label='Prompt markdown file',
+        default=default_name,
+        options=prompt_names,
+    )
+    return working_dir / selected_name
+
+
 def build_messages(prompt_text: str, base64_url: str) -> list[dict]:
     instruction = (
         'Transcribe this review PDF to markdown and respond with JSON only. '
@@ -92,7 +227,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--review-pdf',
-        required=True,
+        required=False,
+        default=None,
         help='Filename from review-pdfs/ (filename only).',
     )
     parser.add_argument(
@@ -130,19 +266,31 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     working_dir = args.working_dir.resolve()
-    prompt_md = args.prompt_md if args.prompt_md is not None else working_dir / 'prompt.md'
     schema = load_schema()
 
     if not os.environ.get('GEMINI_API_KEY'):
         print('Error: GEMINI_API_KEY environment variable is not set.', file=sys.stderr)
         return 2
 
+    if args.prompt_md is not None:
+        prompt_md = args.prompt_md.resolve()
+    else:
+        try:
+            prompt_md = resolve_prompt_md(working_dir)
+        except ValueError as exc:
+            print(f'Error: {exc}', file=sys.stderr)
+            return 2
+
     if not prompt_md.exists():
         print(f'Error: Prompt file not found: {prompt_md}', file=sys.stderr)
         return 2
 
+    review_pdf_filename = args.review_pdf
+    if review_pdf_filename is None:
+        review_pdf_filename = resolve_review_pdf_filename(working_dir)
+
     try:
-        review_pdf_path = resolve_review_pdf(working_dir, args.review_pdf)
+        review_pdf_path = resolve_review_pdf(working_dir, review_pdf_filename)
     except ValueError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 2

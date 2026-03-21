@@ -63,14 +63,17 @@ Use Gemini through LiteLLM to transcribe a file from `review-pdfs/` into
 ```bash
 export GEMINI_API_KEY=...
 python transcribe-review-pdf.py \
-  --working-dir tests/test-1 \
-  --review-pdf test-a_001-003.pdf \
-  --prompt-md tests/test-1/prompt.md
+  --working-dir tests/test-1
 ```
 
 Notes:
 - `transcriptions/` is created automatically if it does not exist.
-- `--review-pdf` must be a filename only (no path).
+- `--review-pdf` is optional. If omitted, the script prompts you to choose from `review-pdfs/` with up/down arrows. The default selection comes from `.review-chunk-state.json` (`last_generated_output`) when available.
+- `--review-pdf` must be a filename only (no path) when provided.
+- `--prompt-md` is optional. If omitted, the script looks for files matching `*prompt*.md` in the working directory:
+  - if exactly one file matches, it is used automatically
+  - if multiple files match, you can choose interactively with up/down arrows
+  - if none match, the script exits with an error
 - `--out-json <path>` optionally saves validated full JSON response.
 
 Live integration test:

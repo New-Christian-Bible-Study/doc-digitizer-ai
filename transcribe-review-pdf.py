@@ -263,6 +263,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def normalize_transcription_newlines(transcription: object) -> str:
+    if not isinstance(transcription, str):
+        return ''
+
+    normalized = transcription.replace('\r\n', '\n')
+    if '\\n' in normalized or '\\r' in normalized:
+        normalized = (
+            normalized.replace('\\r\\n', '\n')
+            .replace('\\n', '\n')
+            .replace('\\r', '\n')
+        )
+    return normalized
+
+
 def main() -> int:
     args = parse_args()
     working_dir = args.working_dir.resolve()
@@ -325,7 +339,7 @@ def main() -> int:
         'confidence_score': raw.get('confidence_score'),
         'confidence_label': raw.get('confidence_label'),
         'notes': raw.get('notes'),
-        'transcription': raw.get('transcription'),
+        'transcription': normalize_transcription_newlines(raw.get('transcription', '')),
         'model': args.model,
         'configuration': f'temperature={args.temperature}, detail=high',
     }

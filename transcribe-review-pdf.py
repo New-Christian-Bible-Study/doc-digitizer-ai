@@ -298,6 +298,10 @@ def main() -> int:
     prompt_text = prompt_md.read_text(encoding='utf-8')
     encoded_pdf = base64.b64encode(review_pdf_path.read_bytes()).decode('utf-8')
     pdf_data_url = f'data:application/pdf;base64,{encoded_pdf}'
+    print(
+        f'Transcribing {review_pdf_path.name} with {args.model}; this can take a while...',
+        flush=True,
+    )
 
     try:
         response = completion(

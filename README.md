@@ -97,7 +97,7 @@ Example `-ai-log.md`:
 {
   "model": "gemini/gemini-2.5-flash",
   "temperature": 0.0,
-  "reasoning_effort": "high",
+  "reasoning_effort": "medium",
   "media_resolution": "high"
 }
 ```
@@ -121,7 +121,7 @@ Example `transcribe.config.json`:
 {
   "model": "gemini/gemini-2.5-flash",
   "temperature": 0.0,
-  "reasoning_effort": "high",
+  "reasoning_effort": "medium",
   "media_resolution": "high"
 }
 ```

@@ -168,7 +168,7 @@ def test_live_integration_transcribes_review_pdf():
     assert '## Transcribe config used' in ai_log_text
     assert '"model": "gemini/gemini-2.5-flash"' in ai_log_text
     assert '"temperature": 0.0' in ai_log_text
-    assert '"reasoning_effort": "high"' in ai_log_text
+    assert '"reasoning_effort": "medium"' in ai_log_text
     assert '"media_resolution": "high"' in ai_log_text
     assert '- Confidence score: `' in ai_log_text
     assert '- Confidence label: `' in ai_log_text

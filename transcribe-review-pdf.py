@@ -8,12 +8,15 @@ import re
 import shutil
 import sys
 import termios
+import time
 import tty
+from datetime import datetime
 from pathlib import Path
 
 import jsonschema
 from jsonargparse import ArgumentParser as JsonArgParser
 from litellm import completion
+from pypdf import PdfReader
 
 from review_pdf_generator import ReviewPdfGenerator
 
@@ -318,8 +321,20 @@ def normalize_transcription_newlines(transcription: object) -> str:
     return normalized
 
 
+def get_pdf_page_count(pdf_path: Path) -> int:
+    try:
+        reader = PdfReader(str(pdf_path))
+        return len(reader.pages)
+    except Exception as exc:
+        raise ValueError(f'Could not read PDF page count from {pdf_path}: {exc}') from exc
+
+
 def build_ai_log_markdown(
     review_pdf_filename: str,
+    run_started_at: str,
+    total_pages: int,
+    inference_time_seconds: object,
+    average_time_per_page_seconds: object,
     transcribe_config_text: str,
     confidence_score: object,
     confidence_label: object,
@@ -329,10 +344,22 @@ def build_ai_log_markdown(
     confidence_score_text = '' if confidence_score is None else str(confidence_score)
     confidence_label_text = '' if confidence_label is None else str(confidence_label)
     notes_text = '' if notes is None else str(notes)
+    inference_time_text = (
+        '' if inference_time_seconds is None else f'{float(inference_time_seconds):.3f}'
+    )
+    average_time_per_page_text = (
+        ''
+        if average_time_per_page_seconds is None
+        else f'{float(average_time_per_page_seconds):.3f}'
+    )
 
     return (
         '# AI transcription run log\n\n'
         f'- Review PDF file: `{review_pdf_filename}`\n'
+        f'- Run started at: `{run_started_at}`\n'
+        f'- Total pages: `{total_pages}`\n'
+        f'- Total inference time (seconds): `{inference_time_text}`\n'
+        f'- Average time per page (seconds): `{average_time_per_page_text}`\n'
         f'- Confidence score: `{confidence_score_text}`\n'
         f'- Confidence label: `{confidence_label_text}`\n'
         f'- Notes: {notes_text}\n'
@@ -349,6 +376,7 @@ def build_ai_log_markdown(
 
 def main() -> int:
     args = parse_args()
+    run_started_at = datetime.now().strftime('%Y-%m-%d %H:%M')
     working_dir = args.working_dir.resolve()
     schema = load_schema()
 
@@ -385,6 +413,11 @@ def main() -> int:
     except ValueError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 2
+    try:
+        total_pages = get_pdf_page_count(review_pdf_path)
+    except ValueError as exc:
+        print(f'Error: {exc}', file=sys.stderr)
+        return 2
 
     prompt_text = prompt_md.read_text(encoding='utf-8')
     transcribe_config_text = config_path.read_text(encoding='utf-8').strip()
@@ -397,6 +430,7 @@ def main() -> int:
     )
 
     try:
+        inference_start = time.perf_counter()
         response = completion(
             model=transcribe_config['model'],
             messages=build_messages(
@@ -408,9 +442,14 @@ def main() -> int:
             reasoning_effort=transcribe_config['reasoning_effort'],
             response_format=build_response_format(schema),
         )
+        inference_time_seconds = time.perf_counter() - inference_start
     except Exception as exc:
         print(f'LiteLLM request failed: {exc}', file=sys.stderr)
         return 1
+
+    average_time_per_page_seconds = (
+        inference_time_seconds / total_pages if total_pages > 0 else None
+    )
 
     try:
         content = response.choices[0].message.content
@@ -446,6 +485,10 @@ def main() -> int:
     output_ai_log_md.write_text(
         build_ai_log_markdown(
             review_pdf_filename=review_pdf_path.name,
+            run_started_at=run_started_at,
+            total_pages=total_pages,
+            inference_time_seconds=inference_time_seconds,
+            average_time_per_page_seconds=average_time_per_page_seconds,
             transcribe_config_text=transcribe_config_text,
             confidence_score=payload['confidence_score'],
             confidence_label=payload['confidence_label'],

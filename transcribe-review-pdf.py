@@ -356,12 +356,14 @@ def build_ai_log_markdown(
     confidence_label_text = '' if confidence_label is None else str(confidence_label)
     notes_text = '' if notes is None else str(notes)
     inference_time_text = (
-        '' if inference_time_seconds is None else f'{float(inference_time_seconds):.3f}'
+        ''
+        if inference_time_seconds is None
+        else f'{float(inference_time_seconds) / 60.0:.2f}'
     )
     average_time_per_page_text = (
         ''
         if average_time_per_page_seconds is None
-        else f'{float(average_time_per_page_seconds):.3f}'
+        else f'{float(average_time_per_page_seconds):.2f}'
     )
 
     return (
@@ -369,7 +371,7 @@ def build_ai_log_markdown(
         f'- Review PDF file: `{review_pdf_filename}`\n'
         f'- Run started at: `{run_started_at}`\n'
         f'- Total pages: `{total_pages}`\n'
-        f'- Total inference time (seconds): `{inference_time_text}`\n'
+        f'- Total inference time (minutes): `{inference_time_text}`\n'
         f'- Average time per page (seconds): `{average_time_per_page_text}`\n'
         f'- Confidence score: `{confidence_score_text}`\n'
         f'- Confidence label: `{confidence_label_text}`\n'

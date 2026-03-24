@@ -69,7 +69,7 @@ python transcribe-review-pdf.py \
 
 Notes:
 - `transcriptions/` is created automatically if it does not exist.
-- Model settings are read from `transcribe.config.json` with this precedence:
+- Model settings and the system prompt string (`sys_instructions`) are read from `transcribe.config.json` with this precedence:
   - `<working-dir>/transcribe.config.json`
   - `<script-dir>/transcribe.config.json` (fallback)
 - `--config` is not required.
@@ -79,7 +79,7 @@ Notes:
   - if exactly one file matches, it is used automatically
   - if multiple files match, you can choose interactively with up/down arrows
   - if none match, the script exits with an error
-- `<review_pdf_stem>-ai-log.md` includes: review PDF filename, confidence score, confidence label, notes, full transcribe config JSON used, and full prompt used.
+- `<review_pdf_stem>-ai-log.md` includes: review PDF filename, confidence score, confidence label, notes, full transcribe config JSON used (including `sys_instructions`), and full prompt used.
 
 Example `-ai-log.md`:
 
@@ -98,9 +98,12 @@ Example `-ai-log.md`:
   "model": "gemini/gemini-2.5-flash",
   "temperature": 0.0,
   "reasoning_effort": "medium",
-  "media_resolution": "high"
+  "media_resolution": "high",
+  "sys_instructions": "Transcribe this review PDF …"
 }
 ```
+
+(`sys_instructions` is abbreviated in this example; the repository file contains the full string.)
 
 ## Prompt used
 
@@ -122,6 +125,9 @@ Example `transcribe.config.json`:
   "model": "gemini/gemini-2.5-flash",
   "temperature": 0.0,
   "reasoning_effort": "medium",
-  "media_resolution": "high"
+  "media_resolution": "high",
+  "sys_instructions": "Transcribe this review PDF …"
 }
 ```
+
+The full default `sys_instructions` text is in the repository’s `transcribe.config.json`.

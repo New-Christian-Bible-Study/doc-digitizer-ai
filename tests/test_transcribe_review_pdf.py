@@ -108,12 +108,14 @@ def test_config_path_resolution_prefers_working_dir(tmp_path: Path):
     write_config(
         script_config_path,
         '{"model":"gemini/gemini-2.5-flash","temperature":0.0,'
-        '"reasoning_effort":"high","media_resolution":"high"}',
+        '"reasoning_effort":"high","media_resolution":"high",'
+        '"sys_instructions":"x"}',
     )
     write_config(
         working_config_path,
         '{"model":"gemini/gemini-2.5-flash","temperature":0.3,'
-        '"reasoning_effort":"medium","media_resolution":"low"}',
+        '"reasoning_effort":"medium","media_resolution":"low",'
+        '"sys_instructions":"x"}',
     )
     resolved = module.resolve_transcribe_config_path(working_dir)
     assert resolved == working_config_path
@@ -125,7 +127,8 @@ def test_invalid_config_media_resolution_rejected(tmp_path: Path):
     write_config(
         config_path,
         '{"model":"gemini/gemini-2.5-flash","temperature":0.0,'
-        '"reasoning_effort":"high","media_resolution":"invalid"}',
+        '"reasoning_effort":"high","media_resolution":"invalid",'
+        '"sys_instructions":"x"}',
     )
 
     with pytest.raises(ValueError, match='Invalid config file'):
@@ -170,6 +173,7 @@ def test_live_integration_transcribes_review_pdf():
     assert '"temperature": 0.0' in ai_log_text
     assert '"reasoning_effort": "medium"' in ai_log_text
     assert '"media_resolution": "high"' in ai_log_text
+    assert '"sys_instructions":' in ai_log_text
     assert '- Confidence score: `' in ai_log_text
     assert '- Confidence label: `' in ai_log_text
     assert '## Prompt used' in ai_log_text

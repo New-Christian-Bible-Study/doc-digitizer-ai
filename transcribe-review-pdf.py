@@ -204,26 +204,17 @@ def resolve_prompt_md(working_dir: Path) -> Path:
     return working_dir / selected_name
 
 
-def build_messages(prompt_text: str, base64_url: str, media_resolution: str) -> list[dict]:
-    instruction = (
-        'Transcribe this review PDF to markdown and respond with JSON only. '
-        'Use this key order: confidence_score, confidence_label, notes, transcription. '
-        "confidence_score must be a number from 0.0 to 1.0. "
-        "confidence_label must be one of: 'low', 'medium', 'high'. "
-        "Preserve structure and formatting. "
-        "For every confidence score below 1.0, the 'notes' field must contain a "
-        'diagnostic list of specific ambiguities. For each instance, specify the line '
-        'number or the word snippet followed by the conflict (for example, '
-        '\'Line 8: "s" or "f" in "blessing"?\'). Strictly avoid general '
-        'descriptions of the document or praise for formatting. If the score is 1.0, '
-        "the 'notes' field should be an empty string."
-    )
-
+def build_messages(
+    sys_instructions: str,
+    prompt_text: str,
+    base64_url: str,
+    media_resolution: str,
+) -> list[dict]:
     return [
+        {'role': 'system', 'content': sys_instructions},
         {
             'role': 'user',
             'content': [
-                {'type': 'text', 'text': instruction},
                 {'type': 'text', 'text': prompt_text},
                 # LiteLLM/OpenAI-style multimodal content uses the field name `detail`.
                 # We expose this as `media_resolution` in config for clarity.
@@ -232,7 +223,7 @@ def build_messages(prompt_text: str, base64_url: str, media_resolution: str) -> 
                     'file': {'file_data': base64_url, 'detail': media_resolution},
                 },
             ],
-        }
+        },
     ]
 
 
@@ -293,6 +284,7 @@ def load_transcribe_config(config_path: Path) -> dict:
         choices=VALID_MEDIA_RESOLUTIONS,
         required=True,
     )
+    parser.add_argument('--sys_instructions', type=str, required=True)
 
     try:
         config_data = json.loads(config_path.read_text(encoding='utf-8'))
@@ -309,6 +301,7 @@ def load_transcribe_config(config_path: Path) -> dict:
         'temperature': parsed.temperature,
         'reasoning_effort': parsed.reasoning_effort,
         'media_resolution': parsed.media_resolution,
+        'sys_instructions': parsed.sys_instructions,
     }
 
 
@@ -452,6 +445,7 @@ def main() -> int:
         response = completion(
             model=transcribe_config['model'],
             messages=build_messages(
+                transcribe_config['sys_instructions'],
                 prompt_text,
                 pdf_data_url,
                 transcribe_config['media_resolution'],

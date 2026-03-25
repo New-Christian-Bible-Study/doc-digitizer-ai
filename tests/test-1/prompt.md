@@ -1,6 +1,6 @@
 # Transcription Instructions
 
-Transcribe all visible content from the provided review PDF into markdown.
+Transcribe all visible content from the provided chunk PDF into markdown.
 
 Requirements:
 - Preserve headings, paragraph breaks, and list structure where present.

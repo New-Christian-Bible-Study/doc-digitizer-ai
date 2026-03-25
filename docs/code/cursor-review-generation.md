@@ -1,6 +1,6 @@
 ---
-name: review chunk generator
-overview: Build an interactive Python CLI to split source PDF ranges into review PDFs, with editable default filenames and local persisted defaults in the working directory.
+name: chunk PDF generator
+overview: Build an interactive Python CLI to split source PDF ranges into chunk PDFs, with editable default filenames and local persisted defaults in the working directory.
 todos:
   - id: add-script
     content: Create interactive Python script for prompt, validation, extraction, and naming.
@@ -23,7 +23,7 @@ todos:
 isProject: false
 ---
 
-# Implement Interactive Review PDF Generator
+# Implement Interactive Chunk PDF Generator
 
 ## Scope
 
@@ -31,47 +31,47 @@ Create a new command-line Python script that:
 
 - prompts for `scan_chunk_path`, `start_pdf_page`, and `end_pdf_page`
 - persists defaults between runs in the current working directory
-- expects source PDFs under `scan-pdfs/` and prompts for filename only
-- extracts selected PDF page ranges into `review-pdfs/`
+- expects source PDFs under `source-pdfs/` and prompts for filename only
+- extracts selected PDF page ranges into `chunk-pdfs/`
 - proposes a default output filename using zero-padded 3-digit page numbers, and lets the reviewer edit it before write
 - uses a shared core class for business logic so non-UI behavior is automatically testable
 
 ## Files to add/update
 
-- Main script: `[doc-digitizer-ai/generate-review-pdf.py](doc-digitizer-ai/generate-review-pdf.py)`
-- Core module: `[doc-digitizer-ai/review_pdf_generator.py](doc-digitizer-ai/review_pdf_generator.py)` (class used by CLI and tests)
+- Main script: `[doc-digitizer-ai/generate-chunk-pdf.py](doc-digitizer-ai/generate-chunk-pdf.py)`
+- Core module: `[doc-digitizer-ai/chunk_pdf_generator.py](doc-digitizer-ai/chunk_pdf_generator.py)` (class used by CLI and tests)
 - Test module: `[doc-digitizer-ai/tests/test_review_pdf_generator.py](doc-digitizer-ai/tests/test_review_pdf_generator.py)`
 - Dependency note: `[doc-digitizer-ai/requirements.txt](doc-digitizer-ai/requirements.txt)` (add `pypdf` if missing)
 - Usage doc: `[doc-digitizer-ai/README.md](doc-digitizer-ai/README.md)`
 - Fixture updates:
   - `[doc-digitizer-ai/tests/test-1/test-a.adoc](doc-digitizer-ai/tests/test-1/test-a.adoc)`
   - `[doc-digitizer-ai/tests/test-1/test-b.adoc](doc-digitizer-ai/tests/test-1/test-b.adoc)`
-  - `[doc-digitizer-ai/tests/test-1/scan-pdfs/](doc-digitizer-ai/tests/test-1/scan-pdfs/)`
-  - `[doc-digitizer-ai/tests/test-1/review-pdfs/](doc-digitizer-ai/tests/test-1/review-pdfs/)`
+  - `[doc-digitizer-ai/tests/test-1/source-pdfs/](doc-digitizer-ai/tests/test-1/source-pdfs/)`
+  - `[doc-digitizer-ai/tests/test-1/chunk-pdfs/](doc-digitizer-ai/tests/test-1/chunk-pdfs/)`
 
 ## Behavior details
 
 - Interactive prompts with defaults:
-  - `scan_chunk_filename`: default to last filename used from `scan-pdfs/`
+  - `source_pdf_filename`: default to last filename used from `source-pdfs/`
   - `start_pdf_page`: default to `last_end_pdf_page + 1` (or `1` if no history)
   - `end_pdf_page`: no computed default unless same as start is desired; enforce `end >= start`
 - Validation:
-  - ensure `scan-pdfs/` exists in current working directory
-  - ensure selected file exists in `scan-pdfs/` and has `.pdf` extension
+  - ensure `source-pdfs/` exists in current working directory
+  - ensure selected file exists in `source-pdfs/` and has `.pdf` extension
   - ensure start/end are positive integers
   - ensure end page does not exceed total PDF pages
 - Output:
-  - destination directory: `review-pdfs/`
+  - destination directory: `chunk-pdfs/`
   - output filename default format: `<scan_chunk_stem>_<start:03d>-<end:03d>.pdf`
   - output filename prompt allows editing that default before file creation
   - example: `book-part-a_001-010.pdf`
 - Persisted state (local to this work directory):
-  - file path: `.review-chunk-state.json` in current working directory
-  - fields: last scan filename, last end page, last generated output, updated timestamp
+  - file path: `.chunk-pdf-state.json` in current working directory
+  - fields: last source filename, last end page, last generated output, updated timestamp
 - Core architecture:
-  - `ReviewPdfGenerator` class encapsulates state loading/saving, filename defaults, validation, and PDF extraction
-  - `generate-review-pdf.py` handles interactive prompts and delegates operations to `ReviewPdfGenerator`
-  - tests call `ReviewPdfGenerator` directly for non-UI behaviors
+- `ChunkPdfGenerator` class encapsulates state loading/saving, filename defaults, validation, and PDF extraction
+- `generate-chunk-pdf.py` handles interactive prompts and delegates operations to `ChunkPdfGenerator`
+  - tests call `ChunkPdfGenerator` directly for non-UI behaviors
 
 ## Implementation approach
 
@@ -82,14 +82,14 @@ Create a new command-line Python script that:
   - Core class methods:
     - `load_state()`
     - `save_state(state)`
-    - `resolve_scan_pdf(filename)`
+    - `resolve_source_pdf(filename)`
     - `build_default_filename(scan_pdf, start_page, end_page)`
     - `extract_pages(scan_pdf, start_page, end_page, output_pdf)`
-    - `create_review_pdf(scan_filename, start_page, end_page, output_filename)`
+    - `create_chunk_pdf(source_filename, start_page, end_page, output_filename)`
   - CLI-only helper:
     - `prompt_with_default(label, default)`
 - Follow PEP 8 and your style preferences (single quotes, no unnecessary type hints for no-return methods).
-- Terminology update: prefer `source_pdf` and `review_pdf` in prompts/docs, while preserving your `scan chunk` / `review chunk` language in help text for clarity.
+- Terminology update: prefer `source_pdf` and `chunk_pdf` in prompts/docs.
 
 ## Verification steps
 
@@ -97,15 +97,15 @@ Create a new command-line Python script that:
   - replace `test.adoc` with `test-a.adoc` and `test-b.adoc`
   - update titles to represent different parts of the same work
   - add explicit page breaks so each AsciiDoc renders to 5 PDF pages
-  - generate PDFs via `asciidoctor-pdf` and place them in `tests/test-1/scan-pdfs/`
+  - generate PDFs via `asciidoctor-pdf` and place them in `tests/test-1/source-pdfs/`
 - Manual run from `tests/test-1/` working directory:
-  - choose scan filename from `scan-pdfs/`
+  - choose source filename from `source-pdfs/`
   - create `001-005`
   - rerun and confirm start defaults to `006`
   - create `006-010`
 - Confirm generated default filename is editable and custom names are accepted.
 - Confirm files are generated in sorted order when default naming is used.
-- Confirm `.review-chunk-state.json` is updated in the current directory.
-- Confirm script accepts filename-only input and resolves to `scan-pdfs/<filename>`.
+- Confirm `.chunk-pdf-state.json` is updated in the current directory.
+- Confirm script accepts filename-only input and resolves to `source-pdfs/<filename>`.
 - Run automated tests for core class behavior (state handling, validation, default naming, extraction range logic).
 

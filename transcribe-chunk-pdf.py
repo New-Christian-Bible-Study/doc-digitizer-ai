@@ -18,7 +18,7 @@ from jsonargparse import ArgumentParser as JsonArgParser
 from litellm import completion
 from pypdf import PdfReader
 
-from review_pdf_generator import ReviewPdfGenerator
+from chunk_pdf_generator import ChunkPdfGenerator
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SCHEMA_PATH = SCRIPT_DIR / 'transcription.schema.json'
@@ -51,27 +51,27 @@ def strip_json_code_fence(content: str) -> str:
     return text
 
 
-def resolve_review_pdf(working_dir: Path, review_pdf_filename: str) -> Path:
-    review_dir = working_dir / 'review-pdfs'
-    if not review_dir.exists():
+def resolve_chunk_pdf(working_dir: Path, chunk_pdf_filename: str) -> Path:
+    chunk_dir = working_dir / 'chunk-pdfs'
+    if not chunk_dir.exists():
         raise ValueError(
-            f'Missing directory: {review_dir}. '
-            'Create review-pdfs and place a review PDF in it.'
+            f'Missing directory: {chunk_dir}. '
+            'Create chunk-pdfs and place a chunk PDF in it.'
         )
 
-    filename = review_pdf_filename.strip()
+    filename = chunk_pdf_filename.strip()
     if not filename:
-        raise ValueError('Review PDF filename is required.')
+        raise ValueError('Chunk PDF filename is required.')
     if Path(filename).name != filename:
-        raise ValueError('Provide only the review PDF filename, not a path.')
+        raise ValueError('Provide only the chunk PDF filename, not a path.')
     if not filename.lower().endswith('.pdf'):
-        raise ValueError("Review PDF filename must end with '.pdf'.")
+        raise ValueError("Chunk PDF filename must end with '.pdf'.")
 
-    review_pdf_path = review_dir / filename
-    if not review_pdf_path.exists():
-        raise ValueError(f'Review PDF not found: {review_pdf_path}')
+    chunk_pdf_path = chunk_dir / filename
+    if not chunk_pdf_path.exists():
+        raise ValueError(f'Chunk PDF not found: {chunk_pdf_path}')
 
-    return review_pdf_path
+    return chunk_pdf_path
 
 
 def prompt_with_default(label: str, default: str) -> str:
@@ -80,12 +80,12 @@ def prompt_with_default(label: str, default: str) -> str:
     return value if value else default
 
 
-def list_review_pdf_filenames(review_dir: Path) -> list[str]:
-    if not review_dir.exists() or not review_dir.is_dir():
+def list_chunk_pdf_filenames(chunk_dir: Path) -> list[str]:
+    if not chunk_dir.exists() or not chunk_dir.is_dir():
         return []
     return sorted(
         file_path.name
-        for file_path in review_dir.iterdir()
+        for file_path in chunk_dir.iterdir()
         if file_path.is_file() and file_path.suffix.lower() == '.pdf'
     )
 
@@ -152,13 +152,13 @@ def prompt_select_filename(label: str, default: str, options: list[str]) -> str:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
-def resolve_review_pdf_filename(working_dir: Path) -> str:
-    review_dir = working_dir / 'review-pdfs'
-    review_filenames = list_review_pdf_filenames(review_dir)
+def resolve_chunk_pdf_filename(working_dir: Path) -> str:
+    chunk_dir = working_dir / 'chunk-pdfs'
+    chunk_filenames = list_chunk_pdf_filenames(chunk_dir)
 
     state = {}
     try:
-        state = ReviewPdfGenerator(working_dir=working_dir).load_state()
+        state = ChunkPdfGenerator(working_dir=working_dir).load_state()
     except ValueError:
         state = {}
 
@@ -166,19 +166,21 @@ def resolve_review_pdf_filename(working_dir: Path) -> str:
     default_filename = ''
     if isinstance(last_generated, str) and last_generated.strip():
         default_filename = Path(last_generated).name
-    if default_filename not in review_filenames:
-        default_filename = review_filenames[0] if review_filenames else default_filename
+    if default_filename not in chunk_filenames:
+        default_filename = (
+            chunk_filenames[0] if chunk_filenames else default_filename
+        )
 
-    if not review_filenames:
+    if not chunk_filenames:
         print(
-            f'No PDF files found in {review_dir}. '
+            f'No PDF files found in {chunk_dir}. '
             'Falling back to manual filename entry.'
         )
 
     return prompt_select_filename(
-        label='Review PDF filename',
+        label='Chunk PDF filename',
         default=default_filename,
-        options=review_filenames,
+        options=chunk_filenames,
     )
 
 
@@ -229,14 +231,14 @@ def build_messages(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Transcribe one review PDF via Gemini/LiteLLM.',
+        description='Transcribe one chunk PDF via Gemini/LiteLLM.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '--review-pdf',
+        '--chunk-pdf',
         required=False,
         default=None,
-        help='Filename from review-pdfs/ (filename only).',
+        help='Filename from chunk-pdfs/ (filename only).',
     )
     parser.add_argument(
         '--prompt-md',
@@ -248,7 +250,7 @@ def parse_args() -> argparse.Namespace:
         '--working-dir',
         type=Path,
         default=Path('.'),
-        help='Optional working directory containing review-pdfs/ and transcriptions/.',
+        help='Optional working directory containing chunk-pdfs/ and transcriptions/.',
     )
     return parser.parse_args()
 
@@ -341,7 +343,7 @@ def get_pdf_page_count(pdf_path: Path) -> int:
 
 
 def build_ai_log_markdown(
-    review_pdf_filename: str,
+    chunk_pdf_filename: str,
     run_started_at: str,
     total_pages: int,
     inference_time_seconds: object,
@@ -368,7 +370,7 @@ def build_ai_log_markdown(
 
     return (
         '# AI transcription run log\n\n'
-        f'- Review PDF file: `{review_pdf_filename}`\n'
+        f'- Chunk PDF file: `{chunk_pdf_filename}`\n'
         f'- Run started at: `{run_started_at}`\n'
         f'- Total pages: `{total_pages}`\n'
         f'- Total inference time (minutes): `{inference_time_text}`\n'
@@ -417,27 +419,27 @@ def main() -> int:
         print(f'Error: Prompt file not found: {prompt_md}', file=sys.stderr)
         return 2
 
-    review_pdf_filename = args.review_pdf
-    if review_pdf_filename is None:
-        review_pdf_filename = resolve_review_pdf_filename(working_dir)
+    chunk_pdf_filename = args.chunk_pdf
+    if chunk_pdf_filename is None:
+        chunk_pdf_filename = resolve_chunk_pdf_filename(working_dir)
 
     try:
-        review_pdf_path = resolve_review_pdf(working_dir, review_pdf_filename)
+        chunk_pdf_path = resolve_chunk_pdf(working_dir, chunk_pdf_filename)
     except ValueError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 2
     try:
-        total_pages = get_pdf_page_count(review_pdf_path)
+        total_pages = get_pdf_page_count(chunk_pdf_path)
     except ValueError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 2
 
     prompt_text = prompt_md.read_text(encoding='utf-8')
     transcribe_config_text = config_path.read_text(encoding='utf-8').strip()
-    encoded_pdf = base64.b64encode(review_pdf_path.read_bytes()).decode('utf-8')
+    encoded_pdf = base64.b64encode(chunk_pdf_path.read_bytes()).decode('utf-8')
     pdf_data_url = f'data:application/pdf;base64,{encoded_pdf}'
     print(
-        f'Transcribing {review_pdf_path.name} with {transcribe_config["model"]}; '
+        f'Transcribing {chunk_pdf_path.name} with {transcribe_config["model"]}; '
         'this can take a while...',
         flush=True,
     )
@@ -500,12 +502,12 @@ def main() -> int:
 
     transcriptions_dir = working_dir / 'transcriptions'
     transcriptions_dir.mkdir(parents=True, exist_ok=True)
-    output_md = transcriptions_dir / f'{review_pdf_path.stem}.md'
-    output_ai_log_md = transcriptions_dir / f'{review_pdf_path.stem}-ai-log.md'
+    output_md = transcriptions_dir / f'{chunk_pdf_path.stem}.md'
+    output_ai_log_md = transcriptions_dir / f'{chunk_pdf_path.stem}-ai-log.md'
     output_md.write_text(payload['transcription'], encoding='utf-8')
     output_ai_log_md.write_text(
         build_ai_log_markdown(
-            review_pdf_filename=review_pdf_path.name,
+            chunk_pdf_filename=chunk_pdf_path.name,
             run_started_at=run_started_at,
             total_pages=total_pages,
             inference_time_seconds=inference_time_seconds,

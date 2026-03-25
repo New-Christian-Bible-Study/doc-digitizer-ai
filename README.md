@@ -1,6 +1,6 @@
-# Review PDF Generator
+# Chunk PDF Generator
 
-Interactive tooling to split source PDFs into smaller review PDFs for transcription and human QA workflows.
+Interactive tooling to split source PDFs into smaller chunk PDFs for transcription and human QA workflows.
 
 ## Install
 
@@ -12,28 +12,28 @@ python -m pip install -r requirements.txt
 
 Run the script from a transcription working directory that contains:
 
-- `scan-pdfs/`: source PDFs to split
-- `review-pdfs/`: generated review PDFs
-- `.review-chunk-state.json`: created automatically to store defaults
+- `source-pdfs/`: source PDFs to split
+- `chunk-pdfs/`: generated chunk PDFs
+- `.chunk-pdf-state.json`: created automatically to store defaults
 
 Example fixture working directory:
 
-- `tests/test-1/scan-pdfs/test-a.pdf`
-- `tests/test-1/scan-pdfs/test-b.pdf`
-- `tests/test-1/review-pdfs/`
+- `tests/test-1/source-pdfs/test-a.pdf`
+- `tests/test-1/source-pdfs/test-b.pdf`
+- `tests/test-1/chunk-pdfs/`
 
-## Generate a review PDF
+## Generate a chunk PDF
 
 ```bash
-python generate-review-pdf.py --working-dir tests/test-1
+python generate-chunk-pdf.py --working-dir tests/test-1
 ```
 
 Prompts:
 
-- Scan PDF filename (filename only, from `scan-pdfs/`)
+- Source PDF filename (filename only, from `source-pdfs/`)
 - Start PDF page
 - End PDF page
-- Output review PDF filename (editable default)
+- Output chunk PDF filename (editable default)
 
 Default output naming:
 
@@ -45,8 +45,8 @@ Default output naming:
 If you edit fixture AsciiDoc files, regenerate PDFs with:
 
 ```bash
-asciidoctor-pdf tests/test-1/test-a.adoc -o tests/test-1/scan-pdfs/test-a.pdf
-asciidoctor-pdf tests/test-1/test-b.adoc -o tests/test-1/scan-pdfs/test-b.pdf
+asciidoctor-pdf tests/test-1/test-a.adoc -o tests/test-1/source-pdfs/test-a.pdf
+asciidoctor-pdf tests/test-1/test-b.adoc -o tests/test-1/source-pdfs/test-b.pdf
 ```
 
 ## Run tests
@@ -55,15 +55,15 @@ asciidoctor-pdf tests/test-1/test-b.adoc -o tests/test-1/scan-pdfs/test-b.pdf
 pytest -q
 ```
 
-## Transcribe a review PDF
+## Transcribe a chunk PDF
 
-Use Gemini through LiteLLM to transcribe a file from `review-pdfs/` into
-`transcriptions/<review_pdf_stem>.md`, and write a reproducibility log to
-`transcriptions/<review_pdf_stem>-ai-log.md`.
+Use Gemini through LiteLLM to transcribe a file from `chunk-pdfs/` into
+`transcriptions/<chunk_pdf_stem>.md`, and write a reproducibility log to
+`transcriptions/<chunk_pdf_stem>-ai-log.md`.
 
 ```bash
 export GEMINI_API_KEY=...
-python transcribe-review-pdf.py \
+python transcribe-chunk-pdf.py \
   --working-dir tests/test-1
 ```
 
@@ -73,20 +73,20 @@ Notes:
   - `<working-dir>/transcribe.config.json`
   - `<script-dir>/transcribe.config.json` (fallback)
 - `--config` is not required.
-- `--review-pdf` is optional. If omitted, the script prompts you to choose from `review-pdfs/` with up/down arrows. The default selection comes from `.review-chunk-state.json` (`last_generated_output`) when available.
-- `--review-pdf` must be a filename only (no path) when provided.
+- `--chunk-pdf` is optional. If omitted, the script prompts you to choose from `chunk-pdfs/` with up/down arrows. The default selection comes from `.chunk-pdf-state.json` (`last_generated_output`) when available.
+- `--chunk-pdf` must be a filename only (no path) when provided.
 - `--prompt-md` is optional. If omitted, the script looks for files matching `*prompt*.md` in the working directory:
   - if exactly one file matches, it is used automatically
   - if multiple files match, you can choose interactively with up/down arrows
   - if none match, the script exits with an error
-- `<review_pdf_stem>-ai-log.md` includes: review PDF filename, confidence score, confidence label, notes, full transcribe config JSON used (including `sys_instructions`), and full prompt used.
+- `<chunk_pdf_stem>-ai-log.md` includes: chunk PDF filename, confidence score, confidence label, notes, full transcribe config JSON used (including `sys_instructions`), and full prompt used.
 
 Example `-ai-log.md`:
 
 ```markdown
 # AI transcription run log
 
-- Review PDF file: `test-a_001-003.pdf`
+- Chunk PDF file: `test-a_001-003.pdf`
 - Confidence score: `0.93`
 - Confidence label: `high`
 - Notes: Clear text with minor uncertainty around one table heading.
@@ -99,7 +99,7 @@ Example `-ai-log.md`:
   "temperature": 0.0,
   "reasoning_effort": "medium",
   "media_resolution": "high",
-  "sys_instructions": "Transcribe this review PDF …"
+  "sys_instructions": "Transcribe this chunk PDF …"
 }
 ```
 
@@ -126,7 +126,7 @@ Example `transcribe.config.json`:
   "temperature": 0.0,
   "reasoning_effort": "medium",
   "media_resolution": "high",
-  "sys_instructions": "Transcribe this review PDF …"
+  "sys_instructions": "Transcribe this chunk PDF …"
 }
 ```
 

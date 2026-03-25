@@ -7,7 +7,7 @@ import termios
 import tty
 from pathlib import Path
 
-from review_pdf_generator import ReviewPdfGenerator
+from chunk_pdf_generator import ChunkPdfGenerator
 
 
 def prompt_with_default(label: str, default: str) -> str:
@@ -32,29 +32,29 @@ def prompt_int(label: str, default: int) -> int:
         return parsed_value
 
 
-def list_scan_pdf_filenames(scan_dir: Path) -> list[str]:
-    if not scan_dir.exists() or not scan_dir.is_dir():
+def list_source_pdf_filenames(source_dir: Path) -> list[str]:
+    if not source_dir.exists() or not source_dir.is_dir():
         return []
     return sorted(
         file_path.name
-        for file_path in scan_dir.iterdir()
+        for file_path in source_dir.iterdir()
         if file_path.is_file() and file_path.suffix.lower() == '.pdf'
     )
 
 
-def prompt_scan_filename(
+def prompt_source_filename(
     label: str,
     default: str,
-    scan_filenames: list[str],
+    source_filenames: list[str],
 ) -> str:
-    if not scan_filenames:
+    if not source_filenames:
         return prompt_with_default(label, default)
 
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return prompt_with_default(label, default)
 
     selected_index = (
-        scan_filenames.index(default) if default in scan_filenames else 0
+        source_filenames.index(default) if default in source_filenames else 0
     )
 
     def truncate_for_terminal(text: str, max_width: int) -> str:
@@ -70,8 +70,10 @@ def prompt_scan_filename(
         columns = shutil.get_terminal_size(fallback=(80, 24)).columns
         content_width = max(10, columns - 2)
         sys.stdout.write('\x1b[2J\x1b[H')
-        sys.stdout.write('Select scan PDF with up/down arrows and press Enter:\n\n')
-        for index, filename in enumerate(scan_filenames):
+        sys.stdout.write(
+            'Select source PDF with up/down arrows and press Enter:\n\n'
+        )
+        for index, filename in enumerate(source_filenames):
             prefix = '> ' if index == selected_index else '  '
             display_name = truncate_for_terminal(filename, content_width)
             sys.stdout.write(f'{prefix}{display_name}\n')
@@ -87,7 +89,7 @@ def prompt_scan_filename(
             key = sys.stdin.read(1)
             if key in ('\r', '\n'):
                 sys.stdout.write('\x1b[2J\x1b[H')
-                selected = scan_filenames[selected_index]
+                selected = source_filenames[selected_index]
                 sys.stdout.write(f'{label}: {selected}\n')
                 sys.stdout.flush()
                 return selected
@@ -100,27 +102,27 @@ def prompt_scan_filename(
                     if next_two == 'A':
                         selected_index = (
                             selected_index - 1
-                        ) % len(scan_filenames)
+                        ) % len(source_filenames)
                     elif next_two == 'B':
                         selected_index = (
                             selected_index + 1
-                        ) % len(scan_filenames)
+                        ) % len(source_filenames)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Create review PDFs from source PDFs in scan-pdfs/.'
+        description='Create chunk PDFs from source PDFs in source-pdfs/.'
     )
     parser.add_argument(
         '--working-dir',
         default='.',
-        help='Working directory that contains scan-pdfs/ and review-pdfs/.',
+        help='Working directory that contains source-pdfs/ and chunk-pdfs/.',
     )
     args = parser.parse_args()
 
-    generator = ReviewPdfGenerator(working_dir=Path(args.working_dir))
+    generator = ChunkPdfGenerator(working_dir=Path(args.working_dir))
 
     try:
         state = generator.load_state()
@@ -128,15 +130,15 @@ def main() -> int:
         print(f'Error reading state file: {exc}')
         return 1
 
-    scan_default = state.get('last_scan_filename', '')
-    scan_filenames = list_scan_pdf_filenames(generator.scan_dir)
-    if not scan_filenames:
+    source_default = state.get('last_source_filename', '')
+    source_filenames = list_source_pdf_filenames(generator.scan_dir)
+    if not source_filenames:
         print(
             f'No PDF files found in {generator.scan_dir}. '
             'Falling back to manual filename entry.'
         )
-    scan_filename = prompt_scan_filename(
-        'Scan PDF filename', scan_default, scan_filenames
+    source_filename = prompt_source_filename(
+        'Source PDF filename', source_default, source_filenames
     )
 
     start_default = generator.get_default_start_page(state)
@@ -145,15 +147,15 @@ def main() -> int:
     end_page = prompt_int('End PDF page', start_page)
 
     try:
-        scan_pdf_path = generator.resolve_scan_pdf(scan_filename)
+        source_pdf_path = generator.resolve_source_pdf(source_filename)
         default_output_name = generator.build_default_filename(
-            scan_pdf_path, start_page, end_page
+            source_pdf_path, start_page, end_page
         )
         output_filename = prompt_with_default(
-            'Output review PDF filename', default_output_name
+            'Output chunk PDF filename', default_output_name
         )
-        output_pdf = generator.create_review_pdf(
-            scan_filename=scan_filename,
+        output_pdf = generator.create_chunk_pdf(
+            source_filename=source_filename,
             start_page=start_page,
             end_page=end_page,
             output_filename=output_filename,
@@ -162,7 +164,7 @@ def main() -> int:
         print(f'Error: {exc}')
         return 1
 
-    print(f'Created review PDF: {output_pdf}')
+    print(f'Created chunk PDF: {output_pdf}')
     return 0
 
 

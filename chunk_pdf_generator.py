@@ -7,13 +7,13 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 
 
-class ReviewPdfGenerator:
+class ChunkPdfGenerator:
     def __init__(
         self,
         working_dir: Path | None = None,
-        state_file_name: str = '.review-chunk-state.json',
-        scan_dir_name: str = 'scan-pdfs',
-        review_dir_name: str = 'review-pdfs',
+        state_file_name: str = '.chunk-pdf-state.json',
+        scan_dir_name: str = 'source-pdfs',
+        review_dir_name: str = 'chunk-pdfs',
     ) -> None:
         self.working_dir = (working_dir or Path.cwd()).resolve()
         self.state_path = self.working_dir / state_file_name
@@ -43,28 +43,28 @@ class ReviewPdfGenerator:
             return last_end_page + 1
         return 1
 
-    def resolve_scan_pdf(self, filename: str) -> Path:
+    def resolve_source_pdf(self, filename: str) -> Path:
         if not self.scan_dir.exists():
             raise ValueError(
                 f'Missing source directory: {self.scan_dir}. '
-                "Create 'scan-pdfs' and add source PDFs first."
+                "Create 'source-pdfs' and add source PDFs first."
             )
 
         normalized_name = filename.strip()
         if not normalized_name:
-            raise ValueError('Scan filename is required.')
+            raise ValueError('Source filename is required.')
 
         if Path(normalized_name).name != normalized_name:
             raise ValueError('Provide only the filename, not a path.')
 
         if not normalized_name.lower().endswith('.pdf'):
-            raise ValueError("Scan filename must end with '.pdf'.")
+            raise ValueError("Source filename must end with '.pdf'.")
 
-        scan_pdf_path = self.scan_dir / normalized_name
-        if not scan_pdf_path.exists():
-            raise ValueError(f'Scan PDF not found: {scan_pdf_path}')
+        source_pdf_path = self.scan_dir / normalized_name
+        if not source_pdf_path.exists():
+            raise ValueError(f'Source PDF not found: {source_pdf_path}')
 
-        return scan_pdf_path
+        return source_pdf_path
 
     def build_default_filename(
         self, scan_pdf: Path, start_page: int, end_page: int
@@ -98,14 +98,14 @@ class ReviewPdfGenerator:
                 f'End page {end_page} is beyond source PDF page count {total_pages}.'
             )
 
-    def create_review_pdf(
+    def create_chunk_pdf(
         self,
-        scan_filename: str,
+        source_filename: str,
         start_page: int,
         end_page: int,
         output_filename: str | None = None,
     ) -> Path:
-        scan_pdf = self.resolve_scan_pdf(scan_filename)
+        scan_pdf = self.resolve_source_pdf(source_filename)
 
         final_output_filename = (output_filename or '').strip()
         if not final_output_filename:
@@ -119,7 +119,7 @@ class ReviewPdfGenerator:
         self.extract_pages(scan_pdf, start_page, end_page, output_pdf)
 
         state = self.load_state()
-        state['last_scan_filename'] = scan_filename
+        state['last_source_filename'] = source_filename
         state['last_end_page'] = end_page
         state['last_generated_output'] = str(output_pdf)
         state['updated_at'] = datetime.now(timezone.utc).isoformat()

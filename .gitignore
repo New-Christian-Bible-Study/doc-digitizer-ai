@@ -38,9 +38,9 @@ pip-wheel-metadata/
 .DS_Store
 Thumbs.db
 
-# Generated review PDFs and local state
-tests/test-1/review-pdfs/*
-!tests/test-1/review-pdfs/.gitkeep
-tests/test-1/.review-chunk-state.json
+# Generated chunk PDFs and local state
+tests/test-1/chunk-pdfs/*
+!tests/test-1/chunk-pdfs/.gitkeep
+tests/test-1/.chunk-pdf-state.json
 tests/test-1/transcriptions/*
 !tests/test-1/transcriptions/.gitkeep

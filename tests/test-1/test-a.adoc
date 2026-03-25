@@ -2,24 +2,24 @@
 :pdf-theme: default
 
 == Page 1
-This is part A, page 1 content for review-PDF generation testing.
+This is part A, page 1 content for chunk-PDF generation testing.
 
 <<<
 
 == Page 2
-This is part A, page 2 content for review-PDF generation testing.
+This is part A, page 2 content for chunk-PDF generation testing.
 
 <<<
 
 == Page 3
-This is part A, page 3 content for review-PDF generation testing.
+This is part A, page 3 content for chunk-PDF generation testing.
 
 <<<
 
 == Page 4
-This is part A, page 4 content for review-PDF generation testing.
+This is part A, page 4 content for chunk-PDF generation testing.
 
 <<<
 
 == Page 5
-This is part A, page 5 content for review-PDF generation testing.
+This is part A, page 5 content for chunk-PDF generation testing.

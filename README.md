@@ -1,12 +1,12 @@
-# PDF Transcription Workflow
+# Document digitizing using AI
 
-This repository provides script tooling for transcribing handwritten and typewritten PDF content with AI.
+This repository provides script tooling for transcribing handwritten and typewritten PDF content using AI.
 
 ## Goals
 
 - Leverage AI as much as possible for transcribing handwritten and typewritten text.
 - Make large transcription projects manageable by splitting source PDFs into chunk PDFs.
-- Improve quality and efficiency by refining prompts early, before re-running many chunks.
+- Improve quality and efficiency by fixing prompts early based on human transcription corrections before generating chunks for later sections.
 - Avoid processing too many pages at once, which can hit model token limits.
 
 ## Install

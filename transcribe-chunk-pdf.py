@@ -5,15 +5,13 @@ import base64
 import json
 import os
 import re
-import shutil
 import sys
-import termios
 import time
-import tty
 from datetime import datetime
 from pathlib import Path
 
 import jsonschema
+import questionary
 from jsonargparse import ArgumentParser as JsonArgParser
 from litellm import completion
 from pypdf import PdfReader
@@ -90,16 +88,6 @@ def list_chunk_pdf_filenames(chunk_dir: Path) -> list[str]:
     )
 
 
-def truncate_for_terminal(text: str, max_width: int) -> str:
-    if max_width <= 0:
-        return ''
-    if len(text) <= max_width:
-        return text
-    if max_width <= 3:
-        return text[:max_width]
-    return f'{text[:max_width - 3]}...'
-
-
 def prompt_select_filename(label: str, default: str, options: list[str]) -> str:
     if not options:
         return prompt_with_default(label, default)
@@ -111,45 +99,16 @@ def prompt_select_filename(label: str, default: str, options: list[str]) -> str:
                 return selected
             print(f"Please choose one of: {', '.join(options)}")
 
-    selected_index = options.index(default) if default in options else 0
-
-    def render():
-        columns = shutil.get_terminal_size(fallback=(80, 24)).columns
-        content_width = max(10, columns - 2)
-        sys.stdout.write('\x1b[2J\x1b[H')
-        sys.stdout.write(f'Select {label} with up/down arrows and press Enter:\n\n')
-        for index, option in enumerate(options):
-            prefix = '> ' if index == selected_index else '  '
-            display_name = truncate_for_terminal(option, content_width)
-            sys.stdout.write(f'{prefix}{display_name}\n')
-        sys.stdout.write('\nPress Ctrl+C to cancel.\n')
-        sys.stdout.flush()
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setcbreak(fd)
-        while True:
-            render()
-            key = sys.stdin.read(1)
-            if key in ('\r', '\n'):
-                sys.stdout.write('\x1b[2J\x1b[H')
-                selected = options[selected_index]
-                sys.stdout.write(f'{label}: {selected}\n')
-                sys.stdout.flush()
-                return selected
-            if key == '\x03':
-                raise KeyboardInterrupt
-            if key == '\x1b':
-                next_one = sys.stdin.read(1)
-                next_two = sys.stdin.read(1)
-                if next_one == '[':
-                    if next_two == 'A':
-                        selected_index = (selected_index - 1) % len(options)
-                    elif next_two == 'B':
-                        selected_index = (selected_index + 1) % len(options)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    default_choice = default if default in options else options[0]
+    selected = questionary.select(
+        f'{label}:',
+        choices=options,
+        default=default_choice,
+        qmark='>',
+    ).ask()
+    if selected is None:
+        raise KeyboardInterrupt
+    return selected
 
 
 def resolve_chunk_pdf_filename(working_dir: Path) -> str:

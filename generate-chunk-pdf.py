@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
-import shutil
 import sys
-import termios
-import tty
 from pathlib import Path
+
+import questionary
 
 from chunk_pdf_generator import ChunkPdfGenerator
 
@@ -53,62 +52,18 @@ def prompt_source_filename(
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return prompt_with_default(label, default)
 
-    selected_index = (
-        source_filenames.index(default) if default in source_filenames else 0
+    default_choice = (
+        default if default in source_filenames else source_filenames[0]
     )
-
-    def truncate_for_terminal(text: str, max_width: int) -> str:
-        if max_width <= 0:
-            return ''
-        if len(text) <= max_width:
-            return text
-        if max_width <= 3:
-            return text[:max_width]
-        return f'{text[:max_width - 3]}...'
-
-    def render():
-        columns = shutil.get_terminal_size(fallback=(80, 24)).columns
-        content_width = max(10, columns - 2)
-        sys.stdout.write('\x1b[2J\x1b[H')
-        sys.stdout.write(
-            'Select source PDF with up/down arrows and press Enter:\n\n'
-        )
-        for index, filename in enumerate(source_filenames):
-            prefix = '> ' if index == selected_index else '  '
-            display_name = truncate_for_terminal(filename, content_width)
-            sys.stdout.write(f'{prefix}{display_name}\n')
-        sys.stdout.write('\nPress Ctrl+C to cancel.\n')
-        sys.stdout.flush()
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setcbreak(fd)
-        while True:
-            render()
-            key = sys.stdin.read(1)
-            if key in ('\r', '\n'):
-                sys.stdout.write('\x1b[2J\x1b[H')
-                selected = source_filenames[selected_index]
-                sys.stdout.write(f'{label}: {selected}\n')
-                sys.stdout.flush()
-                return selected
-            if key == '\x03':
-                raise KeyboardInterrupt
-            if key == '\x1b':
-                next_one = sys.stdin.read(1)
-                next_two = sys.stdin.read(1)
-                if next_one == '[':
-                    if next_two == 'A':
-                        selected_index = (
-                            selected_index - 1
-                        ) % len(source_filenames)
-                    elif next_two == 'B':
-                        selected_index = (
-                            selected_index + 1
-                        ) % len(source_filenames)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    selected = questionary.select(
+        f'{label}:',
+        choices=source_filenames,
+        default=default_choice,
+        qmark='>',
+    ).ask()
+    if selected is None:
+        raise KeyboardInterrupt
+    return selected
 
 
 def main() -> int:

@@ -13,7 +13,7 @@ pytest -q
 Run the live transcription integration test subset:
 
 ```bash
-pytest -q -k transcribe_review_pdf
+pytest -q -k transcribe_chunk_pdf
 ```
 
 ## Regenerate fixture PDFs

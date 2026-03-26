@@ -40,7 +40,7 @@ Create a new command-line Python script that:
 
 - Main script: `[doc-digitizer-ai/generate-chunk-pdf.py](doc-digitizer-ai/generate-chunk-pdf.py)`
 - Core module: `[doc-digitizer-ai/chunk_pdf_generator.py](doc-digitizer-ai/chunk_pdf_generator.py)` (class used by CLI and tests)
-- Test module: `[doc-digitizer-ai/tests/test_review_pdf_generator.py](doc-digitizer-ai/tests/test_review_pdf_generator.py)`
+- Test module: `[doc-digitizer-ai/tests/test_generate_chunk_pdf.py](doc-digitizer-ai/tests/test_generate_chunk_pdf.py)`
 - Dependency note: `[doc-digitizer-ai/requirements.txt](doc-digitizer-ai/requirements.txt)` (add `pypdf` if missing)
 - Usage doc: `[doc-digitizer-ai/README.md](doc-digitizer-ai/README.md)`
 - Fixture updates:

@@ -14,7 +14,7 @@ PROMPT_PATH = WORKING_DIR / 'prompt.md'
 
 
 def load_transcribe_module():
-    spec = spec_from_file_location('transcribe_review_pdf', SCRIPT_PATH)
+    spec = spec_from_file_location('transcribe_chunk_pdf', SCRIPT_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f'Unable to load module from {SCRIPT_PATH}')
     module = module_from_spec(spec)

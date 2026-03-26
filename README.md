@@ -32,7 +32,7 @@ Create one dedicated working directory per work/book/manuscript and run the scri
 | Path | Purpose |
 | --- | --- |
 | `prompt.md` | Prompt used during transcription (`--prompt-md` can override). |
-| `.chunk-pdf-state.json` | Created automatically to store defaults such as last selected source and generated output. |
+| `.chunk-state.json` | Created automatically to store defaults such as last selected source and generated output. |
 | `transcribe.config.json` | Optional per-work config to override the repository default model/settings. |
 
 ### Example layout
@@ -46,7 +46,7 @@ my-work/
 ├── transcriptions/
 ├── prompt.md
 ├── transcribe.config.json
-└── .chunk-pdf-state.json
+└── .chunk-state.json
 ```
 
 Run commands from the repository root and point to your working directory with `--working-dir`, or `cd` into your working directory and pass `--working-dir .`.
@@ -99,7 +99,7 @@ python transcribe-chunk-pdf.py --working-dir tests/test-1
 ### Notes
 
 - `transcriptions/` is created automatically if it does not exist.
-- `--chunk-pdf` is optional. If omitted, you choose from `chunk-pdfs/` interactively. The default selection uses `.chunk-pdf-state.json` (`last_generated_output`) when available.
+- `--chunk-pdf` is optional. If omitted, you choose from `chunk-pdfs/` interactively. The default selection uses `.chunk-state.json` (`last_generated_output`) when available.
 - `--chunk-pdf` must be a filename only (no path).
 - `--prompt-md` is optional. If omitted, the script searches for `*prompt*.md` in the working directory:
   - if exactly one file matches, it is used automatically

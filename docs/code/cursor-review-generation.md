@@ -66,7 +66,7 @@ Create a new command-line Python script that:
   - output filename prompt allows editing that default before file creation
   - example: `book-part-a_001-010.pdf`
 - Persisted state (local to this work directory):
-  - file path: `.chunk-pdf-state.json` in current working directory
+  - file path: `.chunk-state.json` in current working directory
   - fields: last source filename, last end page, last generated output, updated timestamp
 - Core architecture:
 - `ChunkPdfGenerator` class encapsulates state loading/saving, filename defaults, validation, and PDF extraction
@@ -105,7 +105,7 @@ Create a new command-line Python script that:
   - create `006-010`
 - Confirm generated default filename is editable and custom names are accepted.
 - Confirm files are generated in sorted order when default naming is used.
-- Confirm `.chunk-pdf-state.json` is updated in the current directory.
+- Confirm `.chunk-state.json` is updated in the current directory.
 - Confirm script accepts filename-only input and resolves to `source-pdfs/<filename>`.
 - Run automated tests for core class behavior (state handling, validation, default naming, extraction range logic).
 

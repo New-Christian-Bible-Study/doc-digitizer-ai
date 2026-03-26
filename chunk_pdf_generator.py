@@ -11,7 +11,7 @@ class ChunkPdfGenerator:
     def __init__(
         self,
         working_dir: Path | None = None,
-        state_file_name: str = '.chunk-pdf-state.json',
+        state_file_name: str = '.chunk-state.json',
         scan_dir_name: str = 'source-pdfs',
         review_dir_name: str = 'chunk-pdfs',
     ) -> None:

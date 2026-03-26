@@ -41,6 +41,6 @@ Thumbs.db
 # Generated chunk PDFs and local state
 tests/test-1/chunk-pdfs/*
 !tests/test-1/chunk-pdfs/.gitkeep
-tests/test-1/.chunk-pdf-state.json
+tests/test-1/.chunk-state.json
 tests/test-1/transcriptions/*
 !tests/test-1/transcriptions/.gitkeep

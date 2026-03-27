@@ -75,7 +75,7 @@ Default output naming:
 
 `transcribe-chunk-pdf.py` transcribes a file from `chunk-pdfs/` into:
 
-- `transcriptions/<chunk_pdf_stem>.md`
+- `transcriptions/<chunk_pdf_stem>.adoc`
 - `transcriptions/<chunk_pdf_stem>-ai-log.md`
 
 By default a Gemini model is used to do the transcription. 

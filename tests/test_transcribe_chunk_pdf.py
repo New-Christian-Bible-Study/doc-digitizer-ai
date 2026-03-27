@@ -223,10 +223,10 @@ def test_live_integration_transcribes_review_pdf():
         pytest.skip('GEMINI_API_KEY is not set; skipping live integration test.')
 
     ensure_review_pdf_exists()
-    out_md = WORKING_DIR / 'transcriptions' / 'test-a_001-003.md'
+    out_adoc = WORKING_DIR / 'transcriptions' / 'test-a_001-003.adoc'
     out_ai_log_md = WORKING_DIR / 'transcriptions' / 'test-a_001-003-ai-log.md'
-    if out_md.exists():
-        out_md.unlink()
+    if out_adoc.exists():
+        out_adoc.unlink()
     if out_ai_log_md.exists():
         out_ai_log_md.unlink()
 
@@ -243,9 +243,9 @@ def test_live_integration_transcribes_review_pdf():
     )
 
     assert result.returncode == 0, result.stderr
-    assert out_md.exists()
+    assert out_adoc.exists()
     assert out_ai_log_md.exists()
-    assert out_md.read_text(encoding='utf-8').strip() != ''
+    assert out_adoc.read_text(encoding='utf-8').strip() != ''
     ai_log_text = out_ai_log_md.read_text(encoding='utf-8')
     assert 'Chunk PDF file: `test-a_001-003.pdf`' in ai_log_text
     assert '- Model: `' not in ai_log_text

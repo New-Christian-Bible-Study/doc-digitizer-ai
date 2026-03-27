@@ -22,7 +22,7 @@
   "properties": {
     "transcription": {
       "type": "string",
-      "description": "Extracted transcription in markdown format"
+      "description": "Extracted transcription in AsciiDoc format"
     },
     "confidence_score": {
       "type": "number",

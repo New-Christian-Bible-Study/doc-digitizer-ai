@@ -466,9 +466,9 @@ def main() -> int:
 
     transcriptions_dir = working_dir / 'transcriptions'
     transcriptions_dir.mkdir(parents=True, exist_ok=True)
-    output_md = transcriptions_dir / f'{chunk_pdf_path.stem}.md'
+    output_adoc = transcriptions_dir / f'{chunk_pdf_path.stem}.adoc'
     output_ai_log_md = transcriptions_dir / f'{chunk_pdf_path.stem}-ai-log.md'
-    output_md.write_text(payload['transcription'], encoding='utf-8')
+    output_adoc.write_text(payload['transcription'], encoding='utf-8')
     output_ai_log_md.write_text(
         build_ai_log_markdown(
             chunk_pdf_filename=chunk_pdf_path.name,
@@ -485,7 +485,7 @@ def main() -> int:
         encoding='utf-8',
     )
 
-    print(f'Created transcription: {output_md}')
+    print(f'Created transcription: {output_adoc}')
     print(f'Created AI log: {output_ai_log_md}')
     return 0
 

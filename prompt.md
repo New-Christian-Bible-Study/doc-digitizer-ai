@@ -8,12 +8,12 @@
 **Instructions:**
 - Transcribe the text exactly as it appears on the page.
 - **Formatting:**
-    - Use Markdown for structure.
-    - **Paragraph Numbers:** Do not use Markdown list formatting for paragraph or verse numbers. Escape the period after the number with a backslash (e.g., `123\.`) to prevent the editor from re-indexing them as a new list.
-    - **Paragraphing:** Follow the original paragraphing exactly. Do not insert extra blank lines unless they exist in the source.
+    - Use AsciiDoc for structure.
+    - **Paragraph Numbers:** Do not use list formatting for paragraph or verse numbers. Prefix the number with `{empty}` (e.g., `{empty}123.`) to prevent the editor or renderer from re-indexing them as a new list.
+    - **Paragraphing:** AsciiDoc requires a blank line between all paragraphs and around all headers. You MUST separate all paragraphs and headers with a blank line in your output, even if they appear continuous in the source. However, if a single paragraph continues across a page break, do NOT insert a blank line before or after the page number comment; the text must flow continuously to remain a single paragraph.
 - **Structure:**
-    - Use Markdown headers (`#`, `##`, `###`) for titles and major section headings found in the text.
-    - Transcribe the page number as a Markdown comment (e.g., `<!-- Page 1 -->`).
+    - Use AsciiDoc headers (`==`, `===`, `====`) for titles and major section headings found in the text.
+    - Transcribe the page number as an AsciiDoc comment (e.g., `// Page 1`).
 - **Preserve:**
     - All archaic spellings, punctuation, and theological/historical vocabulary. Do not modernize or "fix" the text.
     - **Character Conversion:** Convert the historical "long s" (`ſ`) to a standard `s`.

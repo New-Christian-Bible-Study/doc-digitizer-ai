@@ -1,6 +1,6 @@
-pypdf
-pytest
-litellm
-jsonschema
-jsonargparse
-questionary
+pypdf==6.9.1
+pytest==9.0.2
+litellm==1.82.4
+jsonschema==4.26.0
+jsonargparse==4.47.0
+questionary==2.1.1

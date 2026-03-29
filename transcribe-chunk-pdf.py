@@ -169,6 +169,27 @@ def resolve_prompt_md(working_dir: Path) -> Path:
     return working_dir / selected_name
 
 
+def resolve_prompt_md_auto(working_dir: Path) -> Path:
+    prompt_candidates = sorted(
+        path for path in working_dir.glob('*prompt*.md') if path.is_file()
+    )
+    if not prompt_candidates:
+        default_prompt = SCRIPT_DIR / 'prompt.md'
+        if default_prompt.exists():
+            return default_prompt
+        raise ValueError(
+            f'No prompt markdown files found in {working_dir} matching *prompt*.md '
+            f'and fallback prompt not found: {default_prompt}'
+        )
+
+    if len(prompt_candidates) == 1:
+        return prompt_candidates[0]
+
+    prompt_names = [path.name for path in prompt_candidates]
+    default_name = 'prompt.md' if 'prompt.md' in prompt_names else prompt_names[0]
+    return working_dir / default_name
+
+
 def build_messages(
     sys_instructions: str,
     prompt_text: str,
@@ -194,7 +215,7 @@ def build_messages(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Transcribe one chunk PDF via Gemini/LiteLLM.',
+        description='Transcribe chunk PDF(s) via Gemini/LiteLLM.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -215,7 +236,15 @@ def parse_args() -> argparse.Namespace:
         default=Path('.'),
         help='Optional working directory containing chunk-pdfs/ and transcriptions/.',
     )
-    return parser.parse_args()
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Transcribe every PDF in chunk-pdfs/ without prompting (non-interactive).',
+    )
+    args = parser.parse_args()
+    if args.all and args.chunk_pdf is not None:
+        parser.error('cannot combine --all with --chunk-pdf')
+    return args
 
 
 def resolve_transcribe_config_path(working_dir: Path) -> Path:
@@ -352,40 +381,15 @@ def build_ai_log_markdown(
     )
 
 
-def main() -> int:
-    args = parse_args()
+def transcribe_single_chunk(
+    working_dir: Path,
+    prompt_md: Path,
+    transcribe_config: dict,
+    config_path: Path,
+    schema: dict,
+    chunk_pdf_filename: str,
+) -> int:
     run_started_at = datetime.now().strftime('%Y-%m-%d %H:%M')
-    working_dir = args.working_dir.resolve()
-    schema = load_schema()
-
-    try:
-        config_path = resolve_transcribe_config_path(working_dir)
-        transcribe_config = load_transcribe_config(config_path)
-    except ValueError as exc:
-        print(f'Error: {exc}', file=sys.stderr)
-        return 2
-
-    if not os.environ.get('GEMINI_API_KEY'):
-        print('Error: GEMINI_API_KEY environment variable is not set.', file=sys.stderr)
-        return 2
-
-    if args.prompt_md is not None:
-        prompt_md = args.prompt_md.resolve()
-    else:
-        try:
-            prompt_md = resolve_prompt_md(working_dir)
-        except ValueError as exc:
-            print(f'Error: {exc}', file=sys.stderr)
-            return 2
-
-    if not prompt_md.exists():
-        print(f'Error: Prompt file not found: {prompt_md}', file=sys.stderr)
-        return 2
-
-    chunk_pdf_filename = args.chunk_pdf
-    if chunk_pdf_filename is None:
-        chunk_pdf_filename = resolve_chunk_pdf_filename(working_dir)
-
     try:
         chunk_pdf_path = resolve_chunk_pdf(working_dir, chunk_pdf_filename)
     except ValueError as exc:
@@ -488,6 +492,76 @@ def main() -> int:
     print(f'Created transcription: {output_adoc}')
     print(f'Created AI log: {output_ai_log_md}')
     return 0
+
+
+def main() -> int:
+    args = parse_args()
+    working_dir = args.working_dir.resolve()
+    schema = load_schema()
+
+    try:
+        config_path = resolve_transcribe_config_path(working_dir)
+        transcribe_config = load_transcribe_config(config_path)
+    except ValueError as exc:
+        print(f'Error: {exc}', file=sys.stderr)
+        return 2
+
+    if not os.environ.get('GEMINI_API_KEY'):
+        print('Error: GEMINI_API_KEY environment variable is not set.', file=sys.stderr)
+        return 2
+
+    if args.prompt_md is not None:
+        prompt_md = args.prompt_md.resolve()
+    else:
+        try:
+            if args.all:
+                prompt_md = resolve_prompt_md_auto(working_dir)
+            else:
+                prompt_md = resolve_prompt_md(working_dir)
+        except ValueError as exc:
+            print(f'Error: {exc}', file=sys.stderr)
+            return 2
+
+    if not prompt_md.exists():
+        print(f'Error: Prompt file not found: {prompt_md}', file=sys.stderr)
+        return 2
+
+    if args.all:
+        chunk_dir = working_dir / 'chunk-pdfs'
+        chunk_filenames = list_chunk_pdf_filenames(chunk_dir)
+        if not chunk_filenames:
+            print(
+                f'Error: No PDF files in {chunk_dir}. Nothing to transcribe.',
+                file=sys.stderr,
+            )
+            return 2
+        print(f'--all: transcribing {len(chunk_filenames)} chunk(s).', flush=True)
+        for chunk_pdf_filename in chunk_filenames:
+            print(f'--- {chunk_pdf_filename} ---', flush=True)
+            rc = transcribe_single_chunk(
+                working_dir,
+                prompt_md,
+                transcribe_config,
+                config_path,
+                schema,
+                chunk_pdf_filename,
+            )
+            if rc != 0:
+                return rc
+        return 0
+
+    chunk_pdf_filename = args.chunk_pdf
+    if chunk_pdf_filename is None:
+        chunk_pdf_filename = resolve_chunk_pdf_filename(working_dir)
+
+    return transcribe_single_chunk(
+        working_dir,
+        prompt_md,
+        transcribe_config,
+        config_path,
+        schema,
+        chunk_pdf_filename,
+    )
 
 
 if __name__ == '__main__':

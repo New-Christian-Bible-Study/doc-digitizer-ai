@@ -110,6 +110,16 @@ python transcribe-chunk-pdf.py --working-dir tests/test-1
   - `<script-dir>/transcribe.config.json` (fallback)
 - The `-ai-log.md` file includes chunk filename, run timing, confidence score/label, notes, full config JSON used (including `sys_instructions`), and the full prompt used.
 
+## Build PDFs from transcriptions (AsciiDoc)
+
+`build-transcribed-chunk-pdfs.py` walks `--working-dir`, finds every directory named `transcriptions`, and runs [Asciidoctor PDF](https://asciidoctor.org/docs/asciidoctor-pdf/) on each `.adoc` file in that directory. It writes `<stem>-transcription.pdf` beside `<stem>.adoc` (for example `chunk-1.adoc` to `chunk-1-transcription.pdf`).
+
+Prerequisite: the `asciidoctor-pdf` command (Ruby gem) must be installed and on your `PATH`.
+
+```bash
+python build-transcribed-chunk-pdfs.py --working-dir tests/test-1
+```
+
 ## Developer docs
 
 Developer-oriented content (tests, fixtures, implementation notes) is in `docs/code/`, starting with `docs/code/developer-usage.md`.

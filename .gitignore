@@ -38,6 +38,9 @@ pip-wheel-metadata/
 .DS_Store
 Thumbs.db
 
+# Rendered PDFs next to AsciiDoc in transcriptions (build-transcribed-chunk-pdfs.py)
+**/transcriptions/**/*.pdf
+
 # Generated chunk PDFs and local state
 tests/test-1/chunk-pdfs/*
 !tests/test-1/chunk-pdfs/.gitkeep

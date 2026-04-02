@@ -47,9 +47,9 @@ def assert_common_ai_log_fields(ai_log_text: str, chunk_pdf_filename: str):
     assert '- Model: `' not in ai_log_text
     assert '- Configuration: `' not in ai_log_text
     assert '## Transcribe config used' in ai_log_text
-    assert '"model": "gemini/gemini-2.5-flash"' in ai_log_text
+    assert '"model": "gemini/gemini-3.1-pro-preview"' in ai_log_text
     assert '"temperature": 0.0' in ai_log_text
-    assert '"reasoning_effort": "medium"' in ai_log_text
+    assert '"reasoning_effort": "high"' in ai_log_text
     assert '"media_resolution": "high"' in ai_log_text
     assert '"sys_instructions":' in ai_log_text
     assert '- Confidence score: `' in ai_log_text

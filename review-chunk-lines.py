@@ -5,16 +5,17 @@ Line-by-line transcription review (PySide6): PDF line crops with editable text.
 Requires Poppler (system) for pdf2image — see README.md.
 
 ``--working-dir`` matches ``transcribe-chunk-pdf.py``: the directory that contains
-``chunk-pdfs/`` and ``transcriptions/``.
+``chunk-pdfs/`` and ``transcriptions/``. Choose the chunk PDF from the window dropdown.
 
-  python review-chunk-lines.py --working-dir <dir> --chunk-pdf <file.pdf>
+  python review-chunk-lines.py --working-dir <dir>
 
 Optional: ``--raw-json`` (defaults to ``transcriptions/<stem>_raw.json`` under the working dir).
 
 **Editing this file:** Skim the ``# ---`` block below imports for data flow and UI split. JSON
 shape matches Pass 1 output (see ``transcription.schema.json`` / ``prompt.md``). Crop math is
 isolated in ``clamp_box_2d_to_pixels``; Qt layout and font fitting in ``ReviewMainWindow`` and
-``fit_line_edit_font``. ``main()`` wires CLI → validate paths → rasterize once → window.
+``fit_line_edit_font``. ``main()`` validates ``--working-dir`` and opens the window; the first
+loadable chunk PDF is selected (or choose another from the dropdown).
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QFont, QFontMetrics, QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -95,13 +97,9 @@ def reviewable_line_indices(lines: list) -> list[int]:
     return [i for i, ln in enumerate(lines) if not is_injected_page_marker(ln.get('text', ''))]
 
 
-def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace | None:
+def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
     if argv is None:
         argv = sys.argv[1:]
-    if not argv:
-        return None
-
-    # Keep flags compatible with README examples; ``main()`` requires ``--chunk-pdf``.
     parser = argparse.ArgumentParser(
         description='Review and correct per-line transcriptions for a chunk PDF.',
     )
@@ -115,11 +113,6 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace | None:
         ),
     )
     parser.add_argument(
-        '--chunk-pdf',
-        required=True,
-        help='Chunk PDF filename only (must exist under chunk-pdfs/).',
-    )
-    parser.add_argument(
         '--raw-json',
         type=Path,
         default=None,
@@ -129,6 +122,16 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace | None:
         ),
     )
     return parser.parse_args(argv)
+
+
+def list_chunk_pdf_filenames(chunk_dir: Path) -> list[str]:
+    if not chunk_dir.exists() or not chunk_dir.is_dir():
+        return []
+    return sorted(
+        p.name
+        for p in chunk_dir.iterdir()
+        if p.is_file() and p.suffix.lower() == '.pdf'
+    )
 
 
 @dataclass(frozen=True)
@@ -142,8 +145,12 @@ class ReviewPaths:
     stem: str
 
 
-def resolve_review_paths(cli: argparse.Namespace) -> ReviewPaths | str:
-    working_dir = cli.working_dir.resolve()
+def resolve_review_paths_for_chunk(
+    working_dir: Path,
+    chunk_name: str,
+    raw_json: Path | None,
+) -> ReviewPaths | str:
+    working_dir = working_dir.resolve()
     chunk_pdfs_dir = working_dir / 'chunk-pdfs'
     transcriptions_dir = working_dir / 'transcriptions'
     if not chunk_pdfs_dir.is_dir():
@@ -154,7 +161,7 @@ def resolve_review_paths(cli: argparse.Namespace) -> ReviewPaths | str:
             'transcribe-chunk-pdf.py.'
         )
 
-    chunk_name = cli.chunk_pdf.strip()
+    chunk_name = chunk_name.strip()
     if Path(chunk_name).name != chunk_name:
         return 'Use chunk PDF filename only, not a path.'
     if not chunk_name.lower().endswith('.pdf'):
@@ -165,8 +172,8 @@ def resolve_review_paths(cli: argparse.Namespace) -> ReviewPaths | str:
         return f'Chunk PDF not found: {chunk_pdf_path}'
 
     stem = Path(chunk_name).stem
-    if cli.raw_json is not None:
-        raw_candidate = cli.raw_json
+    if raw_json is not None:
+        raw_candidate = raw_json
         raw_path = (
             (working_dir / raw_candidate).resolve()
             if not raw_candidate.is_absolute()
@@ -355,34 +362,29 @@ class ReviewMainWindow(QMainWindow):
 
     def __init__(
         self,
-        paths: ReviewPaths,
-        page_images: list | None = None,
+        working_dir: Path,
+        chunk_pdf_names: list[str],
+        raw_json: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._paths = paths
-        self.setWindowTitle(f'Line review — {paths.chunk_name}')
+        self._working_dir = working_dir.resolve()
+        self._chunk_pdf_names = chunk_pdf_names
+        self._raw_json_cli = raw_json
+        self._paths: ReviewPaths | None = None
+        self._loaded_chunk_name: str | None = None
+        self._dirty = False
+        self._page_images: list = []
+        self._payload: dict = {}
+        self._source_raw_path = ''
+        self._final_path = Path()
+        self._lines: list = []
+        self._review_indices: list[int] = []
+        self.setWindowTitle('Line review')
         _ic = _review_app_icon()
         if not _ic.isNull():
             self.setWindowIcon(_ic)
         self.resize(880, 480)
-        # Optional preloaded raster avoids double pdf2image work when main() already validated Poppler.
-        self._page_images = page_images if page_images is not None else load_page_images(
-            paths.chunk_pdf_path,
-        )
-        self._payload = load_payload(paths.raw_path, paths.final_path)
-        self._source_raw_path = str(paths.raw_path)  # Used only by Reload (re-read raw from disk).
-        self._final_path = paths.final_path
-        lines = self._payload.get('lines')
-        if not isinstance(lines, list) or not lines:
-            raise ValueError('Invalid payload: missing or empty "lines"')
-        self._lines: list = lines
-        self._review_indices = reviewable_line_indices(lines)
-        if not self._review_indices:
-            raise ValueError(
-                'No lines to review: every entry looks like a synthetic '
-                '`// Page N` marker.'
-            )
         self._ridx = 0
         self._crop_pixmap: QPixmap | None = None
         self._raw_crop: Image.Image | None = None
@@ -398,7 +400,25 @@ class ReviewMainWindow(QMainWindow):
         root.setContentsMargins(10, 8, 10, 8)
         root.setSpacing(4)
 
-        n_skip = len(lines) - len(self._review_indices)
+        chunk_row = QHBoxLayout()
+        chunk_row.setSpacing(8)
+        chunk_row.addWidget(QLabel('Chunk PDF'))
+        self._chunk_combo = QComboBox()
+        self._chunk_combo.setMinimumWidth(280)
+        self._chunk_combo.addItems(chunk_pdf_names)
+        chunk_row.addWidget(self._chunk_combo)
+        chunk_row.addStretch()
+        root.addLayout(chunk_row)
+
+        self._n_skip_lbl = QLabel()
+        self._n_skip_lbl.setWordWrap(False)
+        self._n_skip_lbl.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Maximum,
+        )
+        root.addWidget(self._n_skip_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
+        self._n_skip_lbl.hide()
+
         paths_wrap = QWidget()
         paths_grid = QGridLayout(paths_wrap)
         paths_grid.setContentsMargins(0, 0, 0, 0)
@@ -407,36 +427,22 @@ class ReviewMainWindow(QMainWindow):
         paths_grid.setColumnStretch(0, 0)
         paths_grid.setColumnStretch(1, 0)
         align_lv = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        for r, (label, value) in enumerate(
-            (
-                ('Chunk', paths.chunk_name),
-                ('Raw', paths.raw_path.name),
-                ('Final', paths.final_path.name),
-            ),
+        self._raw_path_lbl = QLabel('—')
+        self._final_path_lbl = QLabel('—')
+        for lab, val, r in (
+            ('Raw', self._raw_path_lbl, 0),
+            ('Final', self._final_path_lbl, 1),
         ):
-            lab = QLabel(label)
-            val = QLabel(value)
-            lab.setAlignment(align_lv)
+            a = QLabel(lab)
+            a.setAlignment(align_lv)
             val.setAlignment(align_lv)
-            paths_grid.addWidget(lab, r, 0)
+            paths_grid.addWidget(a, r, 0)
             paths_grid.addWidget(val, r, 1)
         paths_wrap.setSizePolicy(
             QSizePolicy.Policy.Maximum,
             QSizePolicy.Policy.Maximum,
         )
         root.addWidget(paths_wrap, alignment=Qt.AlignmentFlag.AlignLeft)
-
-        if n_skip:
-            skip_lbl = QLabel(
-                f'Skipping {n_skip} synthetic page marker line(s) (`// Page …`). '
-                'They remain in the saved JSON.'
-            )
-            skip_lbl.setWordWrap(False)
-            skip_lbl.setSizePolicy(
-                QSizePolicy.Policy.Preferred,
-                QSizePolicy.Policy.Maximum,
-            )
-            root.addWidget(skip_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self._page_lbl = QLabel()
         self._line_lbl = QLabel()
@@ -526,10 +532,141 @@ class ReviewMainWindow(QMainWindow):
         self._btn_next.clicked.connect(self._on_next)
         self._btn_save.clicked.connect(self._on_save)
         self._btn_reload.clicked.connect(self._on_reload)
-        self._line_edit.textChanged.connect(self._schedule_fit_font)
-        self._plain.textChanged.connect(self._schedule_fit_font)
+        self._line_edit.textChanged.connect(self._on_line_edit_changed)
+        self._plain.textChanged.connect(self._on_plain_changed)
+        self._chunk_combo.currentIndexChanged.connect(self._on_chunk_combo_index_changed)
 
+        self._set_review_controls_enabled(False)
+        self._try_initial_chunk()
+
+    def _set_review_controls_enabled(self, enabled: bool) -> None:
+        self._btn_prev.setEnabled(enabled)
+        self._btn_next.setEnabled(enabled)
+        self._btn_save.setEnabled(enabled)
+        self._btn_reload.setEnabled(enabled)
+        self._line_edit.setEnabled(enabled)
+        self._plain.setEnabled(enabled)
+        self._crop_label.setEnabled(enabled)
+
+    def _on_line_edit_changed(self) -> None:
+        self._dirty = True
+        self._schedule_fit_font()
+
+    def _on_plain_changed(self) -> None:
+        self._dirty = True
+        self._schedule_fit_font()
+
+    def _sync_combo_to_loaded_chunk(self) -> None:
+        if self._loaded_chunk_name is None:
+            return
+        idx = self._chunk_combo.findText(self._loaded_chunk_name)
+        if idx >= 0:
+            self._chunk_combo.blockSignals(True)
+            self._chunk_combo.setCurrentIndex(idx)
+            self._chunk_combo.blockSignals(False)
+
+    def _on_chunk_combo_index_changed(self, index: int) -> None:
+        if index < 0:
+            return
+        name = self._chunk_combo.itemText(index)
+        if self._paths is not None and name == self._paths.chunk_name:
+            return
+        self._switch_to_chunk(name)
+
+    def _switch_to_chunk(self, chunk_name: str) -> None:
+        if self._paths is not None and self._dirty:
+            box = QMessageBox(self)
+            box.setWindowTitle('Unsaved changes')
+            box.setText('You have unsaved edits for this chunk.')
+            box.setInformativeText('Save them before opening another chunk?')
+            box.setStandardButtons(
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            )
+            box.setDefaultButton(QMessageBox.Save)
+            reply = box.exec()
+            if reply == QMessageBox.Cancel:
+                self._sync_combo_to_loaded_chunk()
+                return
+            if reply == QMessageBox.Save:
+                self._commit_current()
+                save_payload(self._final_path, self._payload)
+                self._dirty = False
+        if not self._load_chunk(chunk_name, show_error=True):
+            self._sync_combo_to_loaded_chunk()
+
+    def _try_initial_chunk(self) -> None:
+        for name in self._chunk_pdf_names:
+            if self._load_chunk(name, show_error=False):
+                self._sync_combo_to_loaded_chunk()
+                return
+        self._chunk_combo.setCurrentIndex(0)
+        self._load_chunk(self._chunk_pdf_names[0], show_error=True)
+
+    def _load_chunk(self, chunk_name: str, show_error: bool) -> bool:
+        resolved = resolve_review_paths_for_chunk(
+            self._working_dir,
+            chunk_name,
+            self._raw_json_cli,
+        )
+        if isinstance(resolved, str):
+            if show_error:
+                QMessageBox.warning(self, 'Cannot load chunk', resolved)
+            return False
+        try:
+            page_images = load_page_images(resolved.chunk_pdf_path)
+            payload = load_payload(resolved.raw_path, resolved.final_path)
+        except Exception as exc:
+            if show_error:
+                QMessageBox.warning(
+                    self,
+                    'Cannot load chunk',
+                    f'Could not read PDF or JSON. {exc}',
+                )
+            return False
+        lines = payload.get('lines')
+        if not isinstance(lines, list) or not lines:
+            msg = 'Invalid payload: missing or empty "lines"'
+            if show_error:
+                QMessageBox.warning(self, 'Cannot load chunk', msg)
+            return False
+        review_indices = reviewable_line_indices(lines)
+        if not review_indices:
+            msg = (
+                'No lines to review: every entry looks like a synthetic '
+                '`// Page N` marker.'
+            )
+            if show_error:
+                QMessageBox.warning(self, 'Cannot load chunk', msg)
+            return False
+
+        self._paths = resolved
+        self._loaded_chunk_name = resolved.chunk_name
+        self._page_images = page_images
+        self._payload = payload
+        self._source_raw_path = str(resolved.raw_path)
+        self._final_path = resolved.final_path
+        self._lines = lines
+        self._review_indices = review_indices
+        self._ridx = 0
+        self._dirty = False
+
+        self.setWindowTitle(f'Line review — {resolved.chunk_name}')
+        self._raw_path_lbl.setText(resolved.raw_path.name)
+        self._final_path_lbl.setText(resolved.final_path.name)
+        n_skip = len(lines) - len(review_indices)
+        if n_skip:
+            self._n_skip_lbl.setText(
+                f'Skipping {n_skip} synthetic page marker line(s) (`// Page …`). '
+                'They remain in the saved JSON.',
+            )
+            self._n_skip_lbl.show()
+        else:
+            self._n_skip_lbl.clear()
+            self._n_skip_lbl.hide()
+
+        self._set_review_controls_enabled(True)
         self._show_line()
+        return True
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -605,20 +742,26 @@ class ReviewMainWindow(QMainWindow):
 
         # Multiline JSON lines use a fixed-height plain editor with a heuristic font only.
         multiline = '\n' in text
-        if multiline:
-            self._plain.setPlainText(text)
-            self._editor_stack.setCurrentIndex(1)
-            px = estimate_transcription_font_px(
-                text,
-                self._raw_crop.width if self._raw_crop else None,
-            )
-            pf = QFont()
-            pf.setPixelSize(px)
-            pf.setStyleHint(QFont.SansSerif)
-            self._plain.setFont(pf)
-        else:
-            self._line_edit.setText(text)
-            self._editor_stack.setCurrentIndex(0)
+        self._line_edit.blockSignals(True)
+        self._plain.blockSignals(True)
+        try:
+            if multiline:
+                self._plain.setPlainText(text)
+                self._editor_stack.setCurrentIndex(1)
+                px = estimate_transcription_font_px(
+                    text,
+                    self._raw_crop.width if self._raw_crop else None,
+                )
+                pf = QFont()
+                pf.setPixelSize(px)
+                pf.setStyleHint(QFont.SansSerif)
+                self._plain.setFont(pf)
+            else:
+                self._line_edit.setText(text)
+                self._editor_stack.setCurrentIndex(0)
+        finally:
+            self._line_edit.blockSignals(False)
+            self._plain.blockSignals(False)
 
         self._btn_prev.setEnabled(self._ridx > 0)
         self._btn_next.setEnabled(self._ridx < n_review - 1)
@@ -662,7 +805,7 @@ class ReviewMainWindow(QMainWindow):
 
     def _on_prev(self) -> None:
         """Persist current line, then move to the previous reviewable index."""
-        if self._ridx <= 0:
+        if self._paths is None or self._ridx <= 0:
             return
         self._commit_current()
         self._ridx -= 1
@@ -670,7 +813,7 @@ class ReviewMainWindow(QMainWindow):
 
     def _on_next(self) -> None:
         """Persist current line, then move to the next reviewable index."""
-        if self._ridx >= len(self._review_indices) - 1:
+        if self._paths is None or self._ridx >= len(self._review_indices) - 1:
             return
         self._commit_current()
         self._ridx += 1
@@ -678,12 +821,17 @@ class ReviewMainWindow(QMainWindow):
 
     def _on_save(self) -> None:
         """Flush editor text to payload and write ``*_final.json``."""
+        if self._paths is None:
+            return
         self._commit_current()
         save_payload(self._final_path, self._payload)
+        self._dirty = False
         self.statusBar().showMessage(f'Wrote {self._final_path}', 6000)
 
     def _on_reload(self) -> None:
         """Optional: re-read raw JSON from disk and reset review state (after confirmation)."""
+        if self._paths is None:
+            return
         self._commit_current()
         reply = QMessageBox.question(
             self,
@@ -704,30 +852,27 @@ class ReviewMainWindow(QMainWindow):
             QMessageBox.warning(self, 'Reload', 'No reviewable lines after reload.')
             return
         self._ridx = 0
+        self._dirty = False
         self._show_line()
 
 
 def main() -> int:
-    # Exit codes: 2 = bad/missing CLI, 1 = path/validation/PDF/errors, 0 = normal Qt exit.
+    # Exit codes: 1 = path/validation errors before Qt, 0 = normal Qt exit.
     cli = parse_cli_args()
-    if cli is None:
+    working_dir = cli.working_dir.resolve()
+    chunk_pdfs_dir = working_dir / 'chunk-pdfs'
+    if not chunk_pdfs_dir.is_dir():
         print(
-            'Usage: python review-chunk-lines.py '
-            '--working-dir <dir> --chunk-pdf <filename.pdf>\n'
-            'Optional: --raw-json <path>',
+            f'Expected a chunk-pdfs directory at {chunk_pdfs_dir}. '
+            '--working-dir should be the folder that contains chunk-pdfs/ '
+            'and transcriptions/.',
             file=sys.stderr,
         )
-        return 2
-
-    resolved = resolve_review_paths(cli)
-    if isinstance(resolved, str):
-        print(resolved, file=sys.stderr)
         return 1
 
-    try:
-        page_images = load_page_images(resolved.chunk_pdf_path)
-    except Exception as exc:
-        print(f'Could not rasterize PDF (is Poppler installed?). {exc}', file=sys.stderr)
+    pdf_names = list_chunk_pdf_filenames(chunk_pdfs_dir)
+    if not pdf_names:
+        print(f'No .pdf files found in {chunk_pdfs_dir}', file=sys.stderr)
         return 1
 
     app = QApplication(sys.argv)
@@ -735,12 +880,7 @@ def main() -> int:
     _ic = _review_app_icon()
     if not _ic.isNull():
         app.setWindowIcon(_ic)
-    try:
-        # Pass rasters in so we do not call pdf2image twice (here + window ctor).
-        win = ReviewMainWindow(resolved, page_images=page_images)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
+    win = ReviewMainWindow(working_dir, pdf_names, raw_json=cli.raw_json)
     win.show()
     _install_terminal_interrupt_handlers(app)
     return app.exec()

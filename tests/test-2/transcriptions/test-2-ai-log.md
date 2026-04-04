@@ -1,13 +1,13 @@
 # AI transcription run log
 
 - Chunk PDF file: `test-2.pdf`
-- Run started at: `2026-04-02 11:53`
+- Run started at: `2026-04-03 09:32`
 - Total pages: `1`
-- Total inference time (minutes): `0.39`
-- Average time per page (seconds): `23.19`
-- Prompt tokens (input): `1856`
-- Completion tokens (output): `2469`
-- Total tokens: `4325`
+- Total inference time (minutes): `0.54`
+- Average time per page (seconds): `32.63`
+- Prompt tokens (input): `1886`
+- Completion tokens (output): `3480`
+- Total tokens: `5366`
 - Confidence score: `1.0`
 - Confidence label: `high`
 - Notes: 
@@ -19,39 +19,40 @@
   "temperature": 0.0,
   "reasoning_effort": "high",
   "media_resolution": "high",
-  "sys_instructions": "Transcribe this chunk PDF to AsciiDoc and respond with JSON only. Use this key order: confidence_score, confidence_label, notes, transcription. confidence_score must be a number from 0.0 to 1.0. confidence_label must be one of: 'low', 'medium', 'high'. Preserve structure and formatting. For every confidence score below 1.0, the 'notes' field must contain a diagnostic list of specific ambiguities. For each instance, specify the line number or the word snippet followed by the conflict (for example, 'Line 8: \"s\" or \"f\" in \"blessing\"?'). Strictly avoid general descriptions of the document or praise for formatting. If the score is 1.0, the 'notes' field should be an empty string."
+  "sys_instructions": "Respond with JSON only matching the provided schema. Key order: lines, confidence_score, confidence_label, notes. The \"lines\" array must contain one object per visible text line in reading order; each object has page_number (integer, 1-based within this chunk), text (string), and box_2d (four integers [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates for that line on that page). confidence_score must be a number from 0.0 to 1.0. confidence_label must be one of: 'low', 'medium', 'high'. For every confidence score below 1.0, the 'notes' field must contain a diagnostic list of specific ambiguities. For each instance, specify the line index or the word snippet followed by the conflict (for example, 'Line 8: \"s\" or \"f\" in \"blessing\"?'). Strictly avoid general descriptions of the document or praise for formatting. If the score is 1.0, the 'notes' field should be an empty string."
 }
 ```
 
 ## Prompt used
 
 ````markdown
-# Transcription Instructions
+# Transcription & Spatial Detection Instructions (Chunk Mode)
 
-**Role:** Archival Transcription Assistant.
-**Task:** Literal transcription of historical text for archival and research purposes.
+**Role:** Archival Transcription Assistant with Spatial Awareness.
+**Task:** Literal transcription and line detection of historical text for a specific PDF chunk.
 
-**Context:** The provided images contain pages from a historical document. This material is being digitized to support academic study and translation.
+**Context:** You are processing a chunk of a historical PDF (Pages {START_PAGE} to {END_PAGE}). This material is being digitized for academic study. You will provide a structured JSON response to facilitate a human-in-the-loop validation process.
 
-**Instructions:**
-- Transcribe the text exactly as it appears on the page, with the exception of end-of-line hyphens.
-- **Formatting:**
-    - Use AsciiDoc for structure.
-    - **Hyphenation:** If a word is split across two lines by a hyphen (an "end-of-line hyphen"), remove the hyphen and join the parts of the word together on the line where the word began.
-    - **Paragraph Numbers:** Do not use list formatting for paragraph or verse numbers. Prefix the number with `{empty}` (e.g., `{empty}123.`) to prevent the editor or renderer from re-indexing them as a new list.
-    - **Paragraphing:** AsciiDoc requires a blank line between all paragraphs and around all headers. You MUST separate all paragraphs and headers with a blank line in your output, even if they appear continuous in the source. However, if a single paragraph continues across a page break, you MUST still insert the `// Page X` comment at the exact point of the page break. To ensure AsciiDoc treats it as a single continuous paragraph, place the comment on its own line but do NOT insert a blank line before or after the comment.
-- **Structure:**
-    - Use AsciiDoc headers (`==`, `===`, `====`) for titles and major section headings found in the text.
-    - Transcribe the page number as an AsciiDoc comment (e.g., `// Page 1`).
-- **Preserve:**
-    - All archaic spellings, punctuation (except for end-of-line hyphens), and theological/historical vocabulary. Do not modernize or "fix" the text.
-    - **Font Styles:** Preserve all italic and bold text found in the source using AsciiDoc syntax (`_italic_` and `*bold*`).
+**Output Format:**
+Return a single JSON **object** with a key `"lines"` whose value is an array. Every line of text on every page must be its own element in that array. Each element is an object containing:
+1. `"page_number"`: The page within **this chunk PDF** where the text appears. Use **1-based** indexing: the first page of the chunk is `1`, the second is `2`, and so on (this matches `images[page_number - 1]` when the chunk is rasterized page-by-page).
+2. `"text"`: The transcription of the line following the rules below.
+3. `"box_2d"`: `[ymin, xmin, ymax, xmax]` coordinates for the line bounding region, **normalized 0–1000** (integers) relative to that page’s width and height.
+
+Also include top-level fields `confidence_score`, `confidence_label`, and `notes` exactly as required by the system instructions.
+
+**Transcription Rules (for the "text" field):**
+- **Literalness:** Transcribe the text exactly as it appears.
+- **Hyphenation:** If a word is split across two lines by a hyphen, remove the hyphen and join the parts of the word together on the line where the word began.
+- **Paragraph Numbers:** Prefix paragraph or verse numbers with `{empty}` (e.g., `{empty}123.`).
+- **Structure:** - Use AsciiDoc headers (`==`, `===`) for titles/major headings.
+    - If a new page starts, ensure the `page_number` increments, and the first line of the new page is transcribed as `// Page X`.
+- **Preservation:**
+    - Preserve archaic spellings and punctuation.
+    - **Font Styles:** Use AsciiDoc syntax (`_italic_` and `*bold*`).
     - **Character Conversion:** Convert the historical "long s" (`ſ`) to a standard `s`.
-    - **Initial Capitals:** If a paragraph starts with a word in ALL CAPS, convert it to Sentence case (e.g., `THESE things` becomes `These things`) unless it is a proper noun that should remain capitalized.
-- **Ignore:**
-    - Running heads (text at the very top of pages used for navigation).
-    - Printer’s ornaments or decorative horizontal lines.
-    - Signature marks (letters/numbers at the bottom center of some printed pages).
-    - Catchwords (the single word often found at the bottom right of a page that is repeated at the top of the next).
+    - **Initial Capitals:** Convert paragraph-starting ALL CAPS words to Sentence case.
+
+**Ignore:** Running heads, ornaments, signature marks, and catchwords.
 
 ````

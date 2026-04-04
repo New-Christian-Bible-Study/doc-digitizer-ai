@@ -206,8 +206,12 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
             choices=[
                 SimpleNamespace(
                     message=SimpleNamespace(
-                        content='{"confidence_score":1.0,"confidence_label":"high",'
-                        '"notes":"ok","transcription":"hello"}'
+                        content=(
+                            '{"lines":[{"page_number":1,"text":"hello",'
+                            '"box_2d":[0,0,100,100]}],'
+                            '"confidence_score":1.0,"confidence_label":"high",'
+                            '"notes":""}'
+                        )
                     )
                 )
             ],

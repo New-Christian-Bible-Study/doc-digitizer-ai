@@ -25,7 +25,7 @@ Create one dedicated working directory per work/book/manuscript and run the scri
 | --- | --- |
 | `source-pdfs/` | Source PDFs to transcribe. |
 | `chunk-pdfs/` | Chunk PDFs generated from page ranges in a source PDF. |
-| `transcriptions/` | Transcription outputs and AI run logs. Created automatically as needed. |
+| `transcriptions/` | Raw/final JSON transcriptions and AI run logs. Created automatically as needed. |
 
 ### Files
 
@@ -75,7 +75,7 @@ Default output naming:
 
 `transcribe-chunk-pdf.py` transcribes a file from `chunk-pdfs/` into:
 
-- `transcriptions/<chunk_pdf_stem>.adoc`
+- `transcriptions/<chunk_pdf_stem>_raw.json` — per-line text with `box_2d` coordinates (Pass 1)
 - `transcriptions/<chunk_pdf_stem>-ai-log.md`
 
 By default a Gemini model is used to do the transcription. 
@@ -110,7 +110,38 @@ python transcribe-chunk-pdf.py --working-dir tests/test-1
   - `<script-dir>/transcribe.config.json` (fallback)
 - The `-ai-log.md` file includes chunk filename, run timing, confidence score/label, notes, full config JSON used (including `sys_instructions`), and the full prompt used.
 
+## Review and correct transcriptions (human pass)
+
+This step does **not** call the model. You still run `transcribe-chunk-pdf.py` first (Pass 1) to produce `transcriptions/<stem>_raw.json`; the Streamlit app (Pass 2) only loads that JSON, shows crops, and lets you save `transcriptions/<stem>_final.json`.
+
+Use the Streamlit app to show each line’s crop next to editable text and save corrections to `transcriptions/<chunk_pdf_stem>_final.json`.
+
+**System dependency:** [Poppler](https://poppler.freedesktop.org/) must be installed so `pdf2image` can rasterize the PDF (on Ubuntu: `sudo apt install poppler-utils`).
+
+`--working-dir` is the same as for `transcribe-chunk-pdf.py`: the directory that contains `chunk-pdfs/` and `transcriptions/` (not those subfolders themselves).
+
+The **`--`** after the script name is required: it separates Streamlit’s own options from the arguments read by `review-chunk-lines.py`. Without it, Streamlit will try to parse `--working-dir` and fail.
+
+```bash
+streamlit run review-chunk-lines.py -- --working-dir . --chunk-pdf your-chunk.pdf
+```
+
+Example using the `tests/test-1` fixture (after `tests/test-1/chunk-pdfs/test-a_001-003.pdf` and `tests/test-1/transcriptions/test-a_001-003_raw.json` exist):
+
+```bash
+STREAMLIT_SERVER_HEADLESS=true streamlit run review-chunk-lines.py -- --working-dir tests/test-1 --chunk-pdf test-a_001-003.pdf
+```
+
+`STREAMLIT_SERVER_HEADLESS=true` skips Streamlit’s first-run email prompt (it runs in the `streamlit` CLI before this script). Then open the URL Streamlit prints (for example `http://localhost:8501`) in your browser. Alternatively, create `~/.streamlit/credentials.toml` once with `[general]` and `email = ""` and you can omit the env var and use auto-open browser behavior.
+
+- `--raw-json` is optional; defaults to `<working-dir>/transcriptions/<stem>_raw.json`. Relative paths are resolved under `--working-dir`.
+- If `_final.json` already exists for that stem, it is loaded so you can resume editing.
+
+**Linux / inotify:** If Streamlit exits with `inotify instance limit reached`, the repo [`.streamlit/config.toml`](.streamlit/config.toml) sets `fileWatcherType = "none"` so the app does not open more inotify watches (reload the app yourself after editing code). From another working directory, you can use `STREAMLIT_SERVER_FILE_WATCHER_TYPE=none` on the same command line, or raise limits system-wide (for example `fs.inotify.max_user_instances` via `sysctl`).
+
 ## Build PDFs from transcriptions (AsciiDoc)
+
+`transcribe-chunk-pdf.py` does not emit `.adoc` files; it writes `*_raw.json`. You can later stitch corrected `*_final.json` content into AsciiDoc for publishing. This script is for when you already have `.adoc` sources under `transcriptions/`.
 
 `build-transcribed-chunk-pdfs.py` walks `--working-dir`, finds every directory named `transcriptions`, and runs [Asciidoctor PDF](https://asciidoctor.org/docs/asciidoctor-pdf/) on each `.adoc` file in that directory. It writes `<stem>-transcription.pdf` beside `<stem>.adoc` (for example `chunk-1.adoc` to `chunk-1-transcription.pdf`).
 

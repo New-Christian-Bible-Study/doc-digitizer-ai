@@ -34,7 +34,7 @@ def build_response_format(schema: dict) -> dict:
     return {
         'type': 'json_schema',
         'json_schema': {
-            'name': 'idp_transcription_response',
+            'name': 'idp_line_transcription_response',
             'schema': schema,
             'strict': True,
         },
@@ -313,6 +313,51 @@ def normalize_transcription_newlines(transcription: object) -> str:
     return normalized
 
 
+def normalize_lines_from_model(raw_lines: object) -> list[dict]:
+    if not isinstance(raw_lines, list):
+        return []
+
+    normalized: list[dict] = []
+    for item in raw_lines:
+        if not isinstance(item, dict):
+            continue
+        normalized.append(
+            {
+                'page_number': item.get('page_number'),
+                'text': normalize_transcription_newlines(item.get('text', '')),
+                'box_2d': item.get('box_2d'),
+            }
+        )
+    return normalized
+
+
+def build_llm_payload_for_validation(raw: dict) -> dict:
+    return {
+        'lines': normalize_lines_from_model(raw.get('lines')),
+        'confidence_score': raw.get('confidence_score'),
+        'confidence_label': raw.get('confidence_label'),
+        'notes': raw.get('notes'),
+    }
+
+
+def build_full_transcription_payload(
+    llm_payload: dict,
+    transcribe_config: dict,
+) -> dict:
+    return {
+        'lines': llm_payload['lines'],
+        'confidence_score': llm_payload['confidence_score'],
+        'confidence_label': llm_payload['confidence_label'],
+        'notes': llm_payload['notes'],
+        'model': transcribe_config['model'],
+        'configuration': (
+            f'temperature={transcribe_config["temperature"]}, '
+            f'media_resolution={transcribe_config["media_resolution"]}, '
+            f'reasoning_effort={transcribe_config["reasoning_effort"]}'
+        ),
+    }
+
+
 def is_notes_min_length_validation_error(exc: jsonschema.ValidationError) -> bool:
     validator_is_min_length = exc.validator == 'minLength'
     validator_value_is_one = exc.validator_value == 1
@@ -471,21 +516,10 @@ def transcribe_single_chunk(
         print(f'Error parsing model response JSON: {exc}', file=sys.stderr)
         return 1
 
-    payload = {
-        'confidence_score': raw.get('confidence_score'),
-        'confidence_label': raw.get('confidence_label'),
-        'notes': raw.get('notes'),
-        'transcription': normalize_transcription_newlines(raw.get('transcription', '')),
-        'model': transcribe_config['model'],
-        'configuration': (
-            f'temperature={transcribe_config["temperature"]}, '
-            f'media_resolution={transcribe_config["media_resolution"]}, '
-            f'reasoning_effort={transcribe_config["reasoning_effort"]}'
-        ),
-    }
+    llm_payload = build_llm_payload_for_validation(raw)
 
     try:
-        jsonschema.validate(instance=payload, schema=schema)
+        jsonschema.validate(instance=llm_payload, schema=schema)
     except jsonschema.ValidationError as exc:
         if is_notes_min_length_validation_error(exc):
             print(
@@ -497,11 +531,23 @@ def transcribe_single_chunk(
             print(f'Schema validation failed: {exc}', file=sys.stderr)
             return 1
 
+    if not llm_payload['lines']:
+        print(
+            'Error: model returned no lines (empty "lines" array).',
+            file=sys.stderr,
+        )
+        return 1
+
+    payload = build_full_transcription_payload(llm_payload, transcribe_config)
+
     transcriptions_dir = working_dir / 'transcriptions'
     transcriptions_dir.mkdir(parents=True, exist_ok=True)
-    output_adoc = transcriptions_dir / f'{chunk_pdf_path.stem}.adoc'
+    output_raw_json = transcriptions_dir / f'{chunk_pdf_path.stem}_raw.json'
     output_ai_log_md = transcriptions_dir / f'{chunk_pdf_path.stem}-ai-log.md'
-    output_adoc.write_text(payload['transcription'], encoding='utf-8')
+    output_raw_json.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + '\n',
+        encoding='utf-8',
+    )
     output_ai_log_md.write_text(
         build_ai_log_markdown(
             chunk_pdf_filename=chunk_pdf_path.name,
@@ -521,7 +567,7 @@ def transcribe_single_chunk(
         encoding='utf-8',
     )
 
-    print(f'Created transcription: {output_adoc}')
+    print(f'Created raw transcription JSON: {output_raw_json}')
     print(f'Created AI log: {output_ai_log_md}')
     return 0
 

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -8,12 +9,11 @@ from transcribe_integration_helpers import REPO_PROMPT_PATH, run_live_transcript
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKING_DIR_TEST_2 = PROJECT_ROOT / 'tests' / 'test-2'
 TEST_2_CHUNK_PDF_FILENAME = 'test-2.pdf'
-TEST_2_EXPECTED_PATH = WORKING_DIR_TEST_2 / 'test-2-expected.adoc'
-TEST_2_OUTPUT_PATH = WORKING_DIR_TEST_2 / 'transcriptions' / 'test-2.adoc'
+TEST_2_OUTPUT_PATH = WORKING_DIR_TEST_2 / 'transcriptions' / 'test-2_raw.json'
 
 
 @pytest.mark.integration
-def test_live_integration_test_2_matches_expected_adoc():
+def test_live_integration_test_2_produces_raw_json_with_lines():
     skip_if_missing_api_key()
 
     if TEST_2_OUTPUT_PATH.exists():
@@ -27,9 +27,14 @@ def test_live_integration_test_2_matches_expected_adoc():
 
     assert result.returncode == 0, result.stderr
     assert TEST_2_OUTPUT_PATH.exists()
-    assert TEST_2_OUTPUT_PATH.read_text(encoding='utf-8') == TEST_2_EXPECTED_PATH.read_text(
-        encoding='utf-8'
-    )
+    raw_payload = json.loads(TEST_2_OUTPUT_PATH.read_text(encoding='utf-8'))
+    assert isinstance(raw_payload.get('lines'), list)
+    assert len(raw_payload['lines']) >= 1
+    for line in raw_payload['lines']:
+        assert 'page_number' in line
+        assert 'text' in line
+        assert isinstance(line.get('box_2d'), list)
+        assert len(line['box_2d']) == 4
 
 
 if __name__ == '__main__':

@@ -1,28 +1,41 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "IDP Transcription Response",
-  "description": "LLM response for document transcription with confidence",
+  "title": "IDP Line Transcription Response",
+  "description": "LLM response: per-line text with spatial boxes and confidence metadata",
   "type": "object",
-  "required": ["transcription", "confidence_score", "confidence_label", "model"],
   "additionalProperties": false,
-  "allOf": [
-    {
-      "if": {
+  "required": ["lines", "confidence_score", "confidence_label", "notes"],
+  "properties": {
+    "lines": {
+      "type": "array",
+      "description": "One object per visible text line in reading order",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page_number", "text", "box_2d"],
         "properties": {
-          "confidence_label": {
-            "enum": ["low", "medium"]
+          "page_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based page index within this chunk PDF"
+          },
+          "text": {
+            "type": "string",
+            "description": "Transcription for this line"
+          },
+          "box_2d": {
+            "type": "array",
+            "description": "[ymin, xmin, ymax, xmax] normalized 0-1000",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "minItems": 4,
+            "maxItems": 4
           }
         }
-      },
-      "then": {
-        "required": ["notes"]
       }
-    }
-  ],
-  "properties": {
-    "transcription": {
-      "type": "string",
-      "description": "Extracted transcription in AsciiDoc format"
     },
     "confidence_score": {
       "type": "number",
@@ -35,18 +48,28 @@
       "enum": ["low", "medium", "high"],
       "description": "Human-readable confidence level"
     },
-    "model": {
-      "type": "string",
-      "description": "Model identifier used for the transcription"
-    },
-    "configuration": {
-      "type": "string",
-      "description": "Human-readable run settings, e.g. temperature=0.2"
-    },
     "notes": {
       "type": "string",
-      "minLength": 1,
-      "description": "Model rationale for confidence score"
+      "description": "Diagnostic notes; required substantive content when confidence is low or medium"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "confidence_label": {
+            "enum": ["low", "medium"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "notes": {
+            "minLength": 1
+          }
+        },
+        "required": ["notes"]
+      }
+    }
+  ]
 }

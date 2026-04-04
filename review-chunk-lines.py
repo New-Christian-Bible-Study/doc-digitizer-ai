@@ -30,7 +30,7 @@ from pathlib import Path
 from pdf2image import convert_from_path
 from PIL import Image
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QFontMetrics, QImage, QPixmap
+from PySide6.QtGui import QFont, QFontMetrics, QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -275,6 +275,14 @@ def save_payload(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
 
 
+def _review_app_icon() -> QIcon:
+    """Window icon: ``icons/review-chunk-lines.png`` beside this script (optional file)."""
+    p = Path(__file__).resolve().parent / 'icons' / 'review-chunk-lines.png'
+    if p.is_file():
+        return QIcon(str(p))
+    return QIcon()
+
+
 def pil_to_qpixmap(im: Image.Image) -> QPixmap:
     """Convert a Pillow image to a ``QPixmap`` for ``QLabel`` without writing temp files.
 
@@ -335,6 +343,9 @@ class ReviewMainWindow(QMainWindow):
         super().__init__(parent)
         self._paths = paths
         self.setWindowTitle(f'Line review — {paths.chunk_name}')
+        _ic = _review_app_icon()
+        if not _ic.isNull():
+            self.setWindowIcon(_ic)
         self.resize(880, 620)
         # Optional preloaded raster avoids double pdf2image work when main() already validated Poppler.
         self._page_images = page_images if page_images is not None else load_page_images(
@@ -633,6 +644,9 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName('Line review')
+    _ic = _review_app_icon()
+    if not _ic.isNull():
+        app.setWindowIcon(_ic)
     try:
         # Pass rasters in so we do not call pdf2image twice (here + window ctor).
         win = ReviewMainWindow(resolved, page_images=page_images)

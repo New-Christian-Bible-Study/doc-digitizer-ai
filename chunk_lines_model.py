@@ -14,6 +14,29 @@ from pathlib import Path
 from pdf2image import convert_from_path
 from PIL import Image
 
+# Line review rasterizes chunk PDFs with Poppler at this DPI so crop geometry is stable
+# across machines. Pass 1 sends the PDF bytes to the model; Gemini's internal render may
+# differ slightly — ``box_2d`` crops in the UI are best-effort vs page aspect ratio.
+REVIEW_PDF_RASTER_DPI = 200
+
+# Normalized coordinate grid for ``box_2d`` (Pass 1 / model convention).
+BOX_2D_NORMALIZED_MAX = 1000
+
+# Padding around the clamped model box for line crops (preview comfort). Too much
+# bottom padding pulls in the next line when line spacing is tight.
+CROP_PAD_TOP_MAX_PX = 8
+CROP_PAD_TOP_BOX_H_DIVISOR = 14
+
+CROP_PAD_BOT_MAX_PX = 12
+CROP_PAD_BOT_MIN_PX = 2
+CROP_PAD_BOT_BOX_H_DIVISOR = 8
+CROP_PAD_BOT_BOX_H_OFFSET = 1
+
+CROP_PAD_X_MAX_PX = 24
+CROP_PAD_X_MIN_PX = 1
+CROP_PAD_X_BOX_W_DIVISOR = 50
+CROP_PAD_X_BOX_W_OFFSET = 1
+
 # Prompt-injected markers (not printed on the page).
 # Must stay aligned with Pass 1 prompt / any transcribe normalization of line text.
 _PAGE_MARKER_PATTERN = re.compile(r'^\s*//\s*Page\s+\d+\s*$', re.IGNORECASE)
@@ -114,23 +137,29 @@ def clamp_box_2d_to_pixels(
     """Turn a model line box into a PIL crop rectangle in pixel coordinates.
 
     Pass 1 stores ``box_2d`` as four integers ``[ymin, xmin, ymax, xmax]`` on a
-    0–1000 grid aligned to the rasterized page (same aspect as ``width`` × ``height``).
+    0–``BOX_2D_NORMALIZED_MAX`` grid aligned to the rasterized page (same aspect as
+    ``width`` × ``height``). Review loads pages at ``REVIEW_PDF_RASTER_DPI`` via
+    Poppler; the model saw the PDF in Pass 1, so coordinates are best-effort aligned
+    by page aspect ratio.
+
     This function maps that box to ``(left, upper, right, lower)`` for ``Image.crop``,
     where ``right`` and ``lower`` are **exclusive** Pillow indices (see Pillow docs).
 
     Steps: scale to pixels → clamp to the page (model noise / rounding can sit on or
-    outside edges) → ensure a non-empty box → add a little padding so ascenders,
-    descenders, and side bearings are not clipped → clamp again after padding.
+    outside edges) → ensure a non-empty box → add padding so ascenders, descenders,
+    and side bearings are not clipped → clamp again after padding.
 
-    Padding is derived from the **box size**, not the full page, so tall raster pages
-    do not add huge strips that pull in the next line.
+    Padding is derived from the **box size**, not the full page. Large bottom padding
+    is a trade-off: it helps descenders but can show part of the following line in
+    tight historical layouts.
     """
     ymin, xmin, ymax, xmax = (int(box_2d[0]), int(box_2d[1]), int(box_2d[2]), int(box_2d[3]))
+    g = float(BOX_2D_NORMALIZED_MAX)
 
-    left = int(round(xmin / 1000.0 * width))
-    upper = int(round(ymin / 1000.0 * height))
-    right = int(round(xmax / 1000.0 * width))
-    lower = int(round(ymax / 1000.0 * height))
+    left = int(round(xmin / g * width))
+    upper = int(round(ymin / g * height))
+    right = int(round(xmax / g * width))
+    lower = int(round(ymax / g * height))
 
     left = max(0, min(left, width))
     right = max(0, min(right, width))
@@ -145,9 +174,24 @@ def clamp_box_2d_to_pixels(
     box_h = lower - upper
     box_w = right - left
 
-    pad_top = min(8, max(0, box_h // 14))
-    pad_bot = min(28, max(3, box_h // 5 + 2))
-    pad_x = min(24, max(1, box_w // 50 + 1))
+    pad_top = min(
+        CROP_PAD_TOP_MAX_PX,
+        max(0, box_h // CROP_PAD_TOP_BOX_H_DIVISOR),
+    )
+    pad_bot = min(
+        CROP_PAD_BOT_MAX_PX,
+        max(
+            CROP_PAD_BOT_MIN_PX,
+            box_h // CROP_PAD_BOT_BOX_H_DIVISOR + CROP_PAD_BOT_BOX_H_OFFSET,
+        ),
+    )
+    pad_x = min(
+        CROP_PAD_X_MAX_PX,
+        max(
+            CROP_PAD_X_MIN_PX,
+            box_w // CROP_PAD_X_BOX_W_DIVISOR + CROP_PAD_X_BOX_W_OFFSET,
+        ),
+    )
 
     left = max(0, left - pad_x)
     upper = max(0, upper - pad_top)
@@ -168,7 +212,8 @@ def rstrip_line_text(value: object) -> object:
 
 
 def load_page_images(pdf_path: Path) -> list[Image.Image]:
-    return convert_from_path(str(pdf_path))
+    """Rasterize each PDF page to a PIL image at :data:`REVIEW_PDF_RASTER_DPI`."""
+    return convert_from_path(str(pdf_path), dpi=REVIEW_PDF_RASTER_DPI)
 
 
 def load_payload(raw_path: Path, final_path: Path) -> dict:
@@ -239,6 +284,8 @@ class ChunkLinesSession:
         )
         if isinstance(resolved, str):
             return resolved
+        # On failure below (or invalid payload), return without mutating ``self`` so a
+        # previously loaded chunk remains active (do not clear the session at the start).
         try:
             page_images = load_page_images(resolved.chunk_pdf_path)
             payload = load_payload(resolved.raw_path, resolved.final_path)

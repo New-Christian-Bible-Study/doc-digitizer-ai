@@ -116,6 +116,8 @@ This step does **not** call the model. You still run `transcribe-chunk-pdf.py` f
 
 **System dependency:** [Poppler](https://poppler.freedesktop.org/) must be installed so `pdf2image` can rasterize the PDF (on Ubuntu: `sudo apt install poppler-utils`).
 
+The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Pass 1 sends the **PDF** to the model, while the UI uses Poppler — normalized `box_2d` line crops are **best-effort** aligned to the page aspect ratio; Gemini’s internal render may differ slightly.
+
 `--working-dir` is the same as for `transcribe-chunk-pdf.py`: the directory that contains `chunk-pdfs/` and `transcriptions/` (not those subfolders themselves).
 
 ```bash

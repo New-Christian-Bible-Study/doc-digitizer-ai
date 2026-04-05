@@ -153,6 +153,28 @@ class ReviewMainWindow(QMainWindow):
         self._crop_pixmap: QPixmap | None = None
         self._raw_crop: Image.Image | None = None
 
+        # Window chrome and the main vertical column layout.
+        root = self._init_window_shell()
+
+        # Top: choose which chunk PDF / session to work on.
+        self._add_chunk_pdf_row(root, chunk_pdf_names)
+        # Optional notice when raw JSON includes synthetic page markers we skip in the UI.
+        self._add_skip_notice_label(root)
+        # Show which raw vs final JSON paths apply to the current chunk.
+        self._add_raw_final_paths_section(root)
+        # Current page number and line index within editable lines.
+        self._add_page_line_labels(root)
+        # Crop / PDF errors (e.g. missing image) surface here, not as a blocking dialog.
+        self._add_error_label(root)
+        # Line crop image plus single-line vs multiline editor (stacked).
+        self._add_crop_and_editor_column(root)
+        # Prev/next/save/reload — disabled until a chunk loads successfully.
+        self._add_navigation_button_row(root)
+
+        self.set_review_controls_enabled(False)
+
+    def _init_window_shell(self) -> QVBoxLayout:
+        """Title, icon, default size, central widget, and root ``QVBoxLayout``."""
         self.setWindowTitle('Line review')
         _ic = _review_app_icon()
         if not _ic.isNull():
@@ -168,7 +190,10 @@ class ReviewMainWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(10, 8, 10, 8)
         root.setSpacing(4)
+        return root
 
+    def _add_chunk_pdf_row(self, root: QVBoxLayout, chunk_pdf_names: list[str]):
+        """Dropdown listing ``chunk-pdfs/*.pdf`` so the user picks the active chunk."""
         chunk_row = QHBoxLayout()
         chunk_row.setSpacing(8)
         chunk_row.addWidget(QLabel('Chunk PDF'))
@@ -179,6 +204,8 @@ class ReviewMainWindow(QMainWindow):
         chunk_row.addStretch()
         root.addLayout(chunk_row)
 
+    def _add_skip_notice_label(self, root: QVBoxLayout):
+        """Hidden by default; controller shows copy when raw lines include skipped markers."""
         self._n_skip_lbl = QLabel()
         self._n_skip_lbl.setWordWrap(False)
         self._n_skip_lbl.setSizePolicy(
@@ -188,6 +215,8 @@ class ReviewMainWindow(QMainWindow):
         root.addWidget(self._n_skip_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
         self._n_skip_lbl.hide()
 
+    def _add_raw_final_paths_section(self, root: QVBoxLayout):
+        """Compact grid: human-readable raw and final JSON filenames for the loaded chunk."""
         paths_wrap = QWidget()
         paths_grid = QGridLayout(paths_wrap)
         paths_grid.setContentsMargins(0, 0, 0, 0)
@@ -213,6 +242,8 @@ class ReviewMainWindow(QMainWindow):
         )
         root.addWidget(paths_wrap, alignment=Qt.AlignmentFlag.AlignLeft)
 
+    def _add_page_line_labels(self, root: QVBoxLayout):
+        """Bold page line plus subtler 'line N of M' — updated per editable row."""
         self._page_lbl = QLabel()
         self._line_lbl = QLabel()
         page_font = self._page_lbl.font()
@@ -229,6 +260,8 @@ class ReviewMainWindow(QMainWindow):
         root.addWidget(self._page_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
         root.addWidget(self._line_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
 
+    def _add_error_label(self, root: QVBoxLayout):
+        """Amber text for non-fatal issues (e.g. crop generation failed)."""
         self._err_lbl = QLabel()
         self._err_lbl.setStyleSheet('color: #b06000;')
         self._err_lbl.setWordWrap(True)
@@ -238,6 +271,8 @@ class ReviewMainWindow(QMainWindow):
         )
         root.addWidget(self._err_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
 
+    def _add_crop_and_editor_column(self, root: QVBoxLayout):
+        """PDF line crop preview and either single-line or multiline editor below it."""
         self._crop_label = QLabel()
         self._crop_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self._crop_label.setContentsMargins(0, 0, 0, 0)
@@ -267,6 +302,7 @@ class ReviewMainWindow(QMainWindow):
             QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Fixed,
         )
+        # One visible editor at a time; stack height follows the current widget only.
         self._editor_stack = StackedSizeToCurrentWidget()
         self._editor_stack.addWidget(self._line_edit)
         self._editor_stack.addWidget(self._plain)
@@ -283,6 +319,8 @@ class ReviewMainWindow(QMainWindow):
         crop_editor.addWidget(self._editor_stack, alignment=Qt.AlignmentFlag.AlignLeft)
         root.addLayout(crop_editor)
 
+    def _add_navigation_button_row(self, root: QVBoxLayout):
+        """Line navigation and persistence actions for the current chunk."""
         btn_row = QHBoxLayout()
         self._btn_prev = QPushButton('◀ Prev')
         self._btn_next = QPushButton('Next ▶')
@@ -294,8 +332,6 @@ class ReviewMainWindow(QMainWindow):
         btn_row.addWidget(self._btn_reload)
         btn_row.addStretch()
         root.addLayout(btn_row)
-
-        self.set_review_controls_enabled(False)
 
     @property
     def working_dir(self) -> Path:

@@ -5,5 +5,6 @@ jsonschema==4.26.0
 jsonargparse==4.47.0
 questionary==2.1.1
 pdf2image==1.17.0
+img2pdf==0.6.3
 Pillow==11.1.0
 PySide6>=6.6.0

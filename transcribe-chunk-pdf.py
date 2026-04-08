@@ -23,6 +23,7 @@ SCHEMA_PATH = SCRIPT_DIR / 'transcription.schema.json'
 TRANSCRIBE_CONFIG_FILENAME = 'transcribe.config.json'
 VALID_REASONING_EFFORTS = ('none', 'disable', 'low', 'medium', 'high', 'minimal')
 VALID_MEDIA_RESOLUTIONS = ('low', 'medium', 'high', 'ultra_high', 'auto')
+DEFAULT_TIMEOUT_SECONDS = 900.0
 
 
 def load_schema() -> dict:
@@ -279,6 +280,12 @@ def load_transcribe_config(config_path: Path) -> dict:
         required=True,
     )
     parser.add_argument('--sys_instructions', type=str, required=True)
+    parser.add_argument(
+        '--timeout_seconds',
+        type=float,
+        required=False,
+        default=DEFAULT_TIMEOUT_SECONDS,
+    )
 
     try:
         config_data = json.loads(config_path.read_text(encoding='utf-8'))
@@ -296,6 +303,7 @@ def load_transcribe_config(config_path: Path) -> dict:
         'reasoning_effort': parsed.reasoning_effort,
         'media_resolution': parsed.media_resolution,
         'sys_instructions': parsed.sys_instructions,
+        'timeout_seconds': parsed.timeout_seconds,
     }
 
 
@@ -453,6 +461,48 @@ def build_ai_log_markdown(
     )
 
 
+def write_raw_response_debug_file(
+    transcriptions_dir: Path,
+    chunk_pdf_stem: str,
+    content: object,
+) -> Path:
+    transcriptions_dir.mkdir(parents=True, exist_ok=True)
+    raw_response_path = transcriptions_dir / f'{chunk_pdf_stem}-raw-response.txt'
+    response_text = '' if content is None else str(content)
+    raw_response_path.write_text(response_text + '\n', encoding='utf-8')
+    return raw_response_path
+
+
+def build_json_error_excerpt(
+    text: str,
+    exc: Exception,
+    context_lines: int = 2,
+) -> str:
+    if not isinstance(exc, json.JSONDecodeError):
+        return ''
+
+    lines = text.splitlines()
+    if not lines:
+        return ''
+
+    line_index = max(exc.lineno - 1, 0)
+    start = max(line_index - context_lines, 0)
+    end = min(line_index + context_lines + 1, len(lines))
+    width = len(str(end))
+
+    excerpt_lines: list[str] = []
+    for idx in range(start, end):
+        line_no = idx + 1
+        prefix = '>>' if idx == line_index else '  '
+        excerpt_lines.append(f'{prefix} {line_no:>{width}} | {lines[idx]}')
+        if idx == line_index:
+            col = max(exc.colno, 1)
+            caret_padding = ' ' * (width + 5 + col - 1)
+            excerpt_lines.append(f'   {caret_padding}^')
+
+    return '\n'.join(excerpt_lines)
+
+
 def transcribe_single_chunk(
     working_dir: Path,
     prompt_md: Path,
@@ -479,7 +529,8 @@ def transcribe_single_chunk(
     pdf_data_url = f'data:application/pdf;base64,{encoded_pdf}'
     print(f'Using prompt file: {prompt_md}')
     print(
-        f'Transcribing {chunk_pdf_path.name} with {transcribe_config["model"]}; '
+        f'Transcribing {chunk_pdf_path.name} with {transcribe_config["model"]} '
+        f'(timeout={transcribe_config["timeout_seconds"]:.0f}s); '
         'this can take a while...',
         flush=True,
     )
@@ -497,6 +548,7 @@ def transcribe_single_chunk(
             temperature=transcribe_config['temperature'],
             reasoning_effort=transcribe_config['reasoning_effort'],
             response_format=build_response_format(schema),
+            timeout=transcribe_config['timeout_seconds'],
         )
         inference_time_seconds = time.perf_counter() - inference_start
     except Exception as exc:
@@ -509,11 +561,29 @@ def transcribe_single_chunk(
         inference_time_seconds / total_pages if total_pages > 0 else None
     )
 
+    content = None
     try:
         content = response.choices[0].message.content
         raw = json.loads(strip_json_code_fence(content))
     except Exception as exc:
+        transcriptions_dir = working_dir / 'transcriptions'
+        raw_response_path = write_raw_response_debug_file(
+            transcriptions_dir=transcriptions_dir,
+            chunk_pdf_stem=chunk_pdf_path.stem,
+            content=content,
+        )
         print(f'Error parsing model response JSON: {exc}', file=sys.stderr)
+        excerpt = build_json_error_excerpt(
+            text='' if content is None else str(content),
+            exc=exc,
+        )
+        if excerpt:
+            print('JSON parse error context:', file=sys.stderr)
+            print(excerpt, file=sys.stderr)
+        print(
+            f'Wrote raw model response to: {raw_response_path}',
+            file=sys.stderr,
+        )
         return 1
 
     llm_payload = build_llm_payload_for_validation(raw)

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QImage, QPalette, QPixmap
+from PySide6.QtGui import QColor, QIcon, QImage, QPalette, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -104,6 +104,9 @@ class ReviewMainWindow(QMainWindow):
         self._line_rows: list[QWidget] = []
         self._row_indices: list[int] = []
         self._page_pixmap: QPixmap | None = None
+        self._last_center_y: float | None = None
+        self._zoom_factor: float = 1.0
+        self._fit_scale: float = 1.0
 
         root = self._init_window_shell()
         self._add_chunk_pdf_row(root, chunk_pdf_names)
@@ -111,6 +114,7 @@ class ReviewMainWindow(QMainWindow):
         self._add_error_label(root)
         self._add_dual_pane(root)
         self._add_navigation_button_row(root)
+        self._add_zoom_shortcuts()
 
         self.set_review_controls_enabled(False)
 
@@ -125,8 +129,8 @@ class ReviewMainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         central.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Maximum,
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
         )
         root = QVBoxLayout(central)
         root.setContentsMargins(10, 8, 10, 8)
@@ -177,7 +181,8 @@ class ReviewMainWindow(QMainWindow):
         self._page_item = QGraphicsPixmapItem()
         self._scene.addItem(self._page_item)
         self._page_view = QGraphicsView(self._scene)
-        self._page_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._page_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._page_view.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         splitter.addWidget(self._page_view)
 
         self._line_scroll = QScrollArea()
@@ -190,6 +195,7 @@ class ReviewMainWindow(QMainWindow):
         self._line_scroll.setWidget(self._line_host)
         splitter.addWidget(self._line_scroll)
         splitter.setSizes([550, 550])
+        splitter.splitterMoved.connect(self._on_splitter_moved)
 
     def _add_navigation_button_row(self, root: QVBoxLayout):
         """Line navigation and persistence actions for the current chunk."""
@@ -206,6 +212,16 @@ class ReviewMainWindow(QMainWindow):
         btn_row.addWidget(self._btn_reload)
         btn_row.addStretch()
         root.addLayout(btn_row)
+
+    def _add_zoom_shortcuts(self) -> None:
+        zoom_in = QShortcut('Ctrl+=', self)
+        zoom_in.activated.connect(lambda: self.adjust_zoom(1.15))
+        zoom_in2 = QShortcut('Ctrl++', self)
+        zoom_in2.activated.connect(lambda: self.adjust_zoom(1.15))
+        zoom_out = QShortcut('Ctrl+-', self)
+        zoom_out.activated.connect(lambda: self.adjust_zoom(1 / 1.15))
+        zoom_reset = QShortcut('Ctrl+0', self)
+        zoom_reset.activated.connect(self.reset_zoom_to_fit)
 
     @property
     def working_dir(self) -> Path:
@@ -327,17 +343,50 @@ class ReviewMainWindow(QMainWindow):
         self._page_pixmap = pil_to_qpixmap(page_image)
         self._page_item.setPixmap(self._page_pixmap)
         self._scene.setSceneRect(self._page_item.boundingRect())
-        self._page_view.fitInView(self._page_item, Qt.KeepAspectRatio)
+        self.reset_zoom_to_fit()
 
     def center_page_on_normalized_y(self, normalized_y: float) -> None:
         if self._page_pixmap is None or self._page_pixmap.isNull():
             return
+        self._last_center_y = normalized_y
         page_h = self._page_pixmap.height()
         target_y = int((normalized_y / float(BOX_2D_NORMALIZED_MAX)) * page_h)
         self._smooth_center_on_y(target_y)
 
     def _smooth_center_on_y(self, y: int) -> None:
         self._page_view.centerOn(0, y)
+
+    def _fit_page_to_pane_width(self) -> None:
+        if self._page_pixmap is None or self._page_pixmap.isNull():
+            return
+        viewport_w = max(1, self._page_view.viewport().width())
+        pixmap_w = max(1, self._page_pixmap.width())
+        self._fit_scale = viewport_w / float(pixmap_w)
+        scale = self._fit_scale * self._zoom_factor
+        self._page_view.resetTransform()
+        self._page_view.scale(scale, scale)
+
+    def adjust_zoom(self, factor: float) -> None:
+        if self._page_pixmap is None or self._page_pixmap.isNull():
+            return
+        self._zoom_factor = max(0.25, min(5.0, self._zoom_factor * factor))
+        self._refit_and_restore_focus_center()
+
+    def reset_zoom_to_fit(self) -> None:
+        self._zoom_factor = 1.0
+        self._refit_and_restore_focus_center()
+
+    def _on_splitter_moved(self, _pos: int, _index: int) -> None:
+        self._refit_and_restore_focus_center()
+
+    def _refit_and_restore_focus_center(self) -> None:
+        self._fit_page_to_pane_width()
+        if self._last_center_y is not None:
+            self.center_page_on_normalized_y(self._last_center_y)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self._refit_and_restore_focus_center)
 
     def line_text(self, ridx: int) -> str:
         if 0 <= ridx < len(self._line_edits):

@@ -279,44 +279,46 @@ class ReviewMainWindow(QMainWindow):
         self.clear_line_rows()
         for ridx, payload_idx in enumerate(session.editable_indices):
             line = session.lines[payload_idx]
+            conf = line_confidence_label(line) or 'high'
+            notes_text = line_notes(line).strip()
             row = QWidget()
             row_layout = QVBoxLayout(row)
             row_layout.setContentsMargins(6, 6, 6, 6)
             row_layout.setSpacing(4)
-            top = QHBoxLayout()
-            top.addWidget(QLabel(f'Line {ridx + 1}'))
-            badge = QLabel((line_confidence_label(line) or 'none').upper())
-            badge.setMinimumWidth(58)
-            top.addWidget(badge)
-            top.addStretch()
-            row_layout.addLayout(top)
+            badge = QLabel(conf.upper())
+
+            # Keep high-confidence rows visually quiet. For medium/low rows, put a
+            # clear warning line above the editor with confidence + reason.
+            if conf != 'high':
+                warn = QLabel(
+                    f'Confidence: {conf.upper()}'
+                    + (f' - {notes_text}' if notes_text else ' - No reason provided')
+                )
+                warn.setWordWrap(True)
+                warn.setStyleSheet('QLabel { font-weight: 700; }')
+                row_layout.addWidget(warn)
 
             edit = FocusLineEdit(ridx)
             edit.setText((line.get('text', '') if isinstance(line.get('text', ''), str) else '').rstrip())
             edit.textChanged.connect(ctrl._on_text_changed)
             edit.focused.connect(ctrl._on_row_focused)
             row_layout.addWidget(edit)
-
-            notes = QLabel(line_notes(line))
-            notes.setWordWrap(True)
-            notes.setVisible(bool(notes.text().strip()))
-            row_layout.addWidget(notes)
-            self._apply_row_confidence_style(row, badge, line_confidence_label(line))
+            self._apply_row_confidence_style(row, badge, conf)
 
             self._line_layout.insertWidget(self._line_layout.count() - 1, row)
             self._line_rows.append(row)
             self._line_edits.append(edit)
             self._line_badges.append(badge)
-            self._line_notes.append(notes)
+            self._line_notes.append(QLabel(''))
             self._row_indices.append(payload_idx)
 
     def _apply_row_confidence_style(self, row: QWidget, badge: QLabel, label: str | None) -> None:
         if label == 'low':
-            row.setStyleSheet('QWidget { background: #2f1919; border: 1px solid #6f2e2e; border-radius: 5px; }')
-            badge.setStyleSheet('QLabel { color: #ffd6d6; font-weight: 700; }')
+            row.setStyleSheet('QWidget { border: 1px solid #6f2e2e; border-radius: 5px; }')
+            badge.setStyleSheet('QLabel { color: #cf3a3a; font-weight: 700; }')
         elif label == 'medium':
-            row.setStyleSheet('QWidget { background: #2f2a18; border: 1px solid #796324; border-radius: 5px; }')
-            badge.setStyleSheet('QLabel { color: #fff2be; font-weight: 700; }')
+            row.setStyleSheet('QWidget { border: 1px solid #796324; border-radius: 5px; }')
+            badge.setStyleSheet('QLabel { color: #9d7d1d; font-weight: 700; }')
         else:
             row.setStyleSheet('QWidget { border: 1px solid #444; border-radius: 5px; }')
             badge.setStyleSheet('QLabel { color: #cfcfcf; font-weight: 600; }')

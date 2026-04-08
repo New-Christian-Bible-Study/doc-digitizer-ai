@@ -192,8 +192,8 @@ class ReviewMainWindow(QMainWindow):
         self._line_scroll.setWidgetResizable(True)
         self._line_host = QWidget()
         self._line_layout = QVBoxLayout(self._line_host)
-        self._line_layout.setContentsMargins(6, 6, 6, 6)
-        self._line_layout.setSpacing(8)
+        self._line_layout.setContentsMargins(2, 2, 2, 2)
+        self._line_layout.setSpacing(2)
         self._line_layout.addStretch()
         self._line_scroll.setWidget(self._line_host)
         splitter.addWidget(self._line_scroll)
@@ -289,8 +289,8 @@ class ReviewMainWindow(QMainWindow):
             notes_text = line_notes(line).strip()
             row = QWidget()
             row_layout = QVBoxLayout(row)
-            row_layout.setContentsMargins(6, 6, 6, 6)
-            row_layout.setSpacing(4)
+            row_layout.setContentsMargins(2, 2, 2, 2)
+            row_layout.setSpacing(2)
             badge = QLabel(conf.upper())
 
             # Keep high-confidence rows visually quiet. For medium/low rows, put a
@@ -301,12 +301,13 @@ class ReviewMainWindow(QMainWindow):
                     + (f' - {notes_text}' if notes_text else ' - No reason provided')
                 )
                 warn.setWordWrap(True)
-                warn.setStyleSheet('QLabel { font-weight: 700; }')
+                warn.setStyleSheet('QLabel { font-weight: 700; margin-bottom: 1px; }')
                 row_layout.addWidget(warn)
             else:
                 warn = None
 
             edit = FocusLineEdit(ridx)
+            edit.setStyleSheet('QLineEdit { padding-top: 2px; padding-bottom: 2px; }')
             original_text = (
                 line.get('text', '') if isinstance(line.get('text', ''), str) else ''
             ).rstrip()
@@ -335,7 +336,7 @@ class ReviewMainWindow(QMainWindow):
             row.setStyleSheet('QWidget { border: 1px solid #796324; border-radius: 5px; }')
             badge.setStyleSheet('QLabel { color: #9d7d1d; font-weight: 700; }')
         else:
-            row.setStyleSheet('QWidget { border: 1px solid #444; border-radius: 5px; }')
+            row.setStyleSheet('')
             badge.setStyleSheet('QLabel { color: #cfcfcf; font-weight: 600; }')
 
     def set_active_row(self, ridx: int) -> None:
@@ -425,10 +426,10 @@ class ReviewMainWindow(QMainWindow):
         changed = current_text != self._line_original_texts[ridx]
         if changed:
             warn.setStyleSheet(
-                'QLabel { font-weight: 700; text-decoration: line-through; opacity: 0.75; }'
+                'QLabel { font-weight: 700; text-decoration: line-through; opacity: 0.75; margin-bottom: 1px; }'
             )
         else:
-            warn.setStyleSheet('QLabel { font-weight: 700; }')
+            warn.setStyleSheet('QLabel { font-weight: 700; margin-bottom: 1px; }')
 
 
 class FocusLineEdit(QLineEdit):

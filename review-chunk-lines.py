@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""
-Line-by-line transcription review (PySide6): PDF line crops with editable text.
-
-Requires Poppler (system) for pdf2image — see README.md.
-
-``--working-dir`` matches ``transcribe-chunk-pdf.py``: the directory that contains
-``chunk-pdfs/`` and ``transcriptions/``. Choose the chunk PDF from the window dropdown.
-
-  python review-chunk-lines.py --working-dir <dir>
-
-Optional: ``--raw-json`` (defaults to ``transcriptions/<stem>_raw.json`` under the working dir).
-
-Domain logic lives in ``chunk_lines_model.py``; this file is View + Controller + entrypoint.
-"""
+"""Line-by-line transcription review with approximate image sync."""
 
 from __future__ import annotations
 
@@ -21,86 +8,47 @@ import signal
 import sys
 from pathlib import Path
 
-from PIL import Image
-from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtGui import QFont, QFontMetrics, QIcon, QImage, QPixmap
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
-    QGridLayout,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
-    QStackedWidget,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
-from chunk_lines_model import ChunkLinesSession, list_chunk_pdf_filenames
+from PIL import Image
 
-
-class StackedSizeToCurrentWidget(QStackedWidget):
-    """``QStackedWidget`` uses the max of all pages' size hints; we only need the visible page."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.currentChanged.connect(self.updateGeometry)
-
-    def sizeHint(self) -> QSize:
-        w = self.currentWidget()
-        return w.sizeHint() if w is not None else super().sizeHint()
-
-    def minimumSizeHint(self) -> QSize:
-        w = self.currentWidget()
-        return w.minimumSizeHint() if w is not None else super().minimumSizeHint()
-
-
-def estimate_transcription_font_px(text: str, crop_width: int | None) -> int:
-    """Rough initial ``QFont`` pixel size for multiline editor rows (not used for single-line fit)."""
-    t = text.rstrip() if isinstance(text, str) else text
-    n = max(len(t), 1)
-    w = min(1100, max(crop_width or 640, 320))
-    return max(13, min(160, int(w / (n * 0.48))))
+from chunk_lines_model import (
+    BOX_2D_NORMALIZED_MAX,
+    ChunkLinesSession,
+    line_confidence_label,
+    line_notes,
+    list_chunk_pdf_filenames,
+    normalized_center_y_for_line,
+)
 
 
 def pil_to_qpixmap(im: Image.Image) -> QPixmap:
-    """Convert a Pillow image to a ``QPixmap`` for ``QLabel`` without writing temp files."""
     if im.mode != 'RGB':
         im = im.convert('RGB')
     w, h = im.size
     bpl = 3 * w
     buf = im.tobytes('raw', 'RGB')
     qimg = QImage(buf, w, h, bpl, QImage.Format.Format_RGB888)
-    return QPixmap.fromImage(qimg)
-
-
-def fit_line_edit_font(line_edit: QLineEdit, max_text_width: int) -> None:
-    """Set the largest pixel font size so the full line fits in ``max_text_width`` pixels."""
-    text = line_edit.text()
-    font = QFont(line_edit.font())
-    font.setStyleHint(QFont.SansSerif)
-    if not text:
-        font.setPixelSize(12)
-        line_edit.setFont(font)
-        return
-    lo, hi = 8, 400
-    best = 8
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        font.setPixelSize(mid)
-        fm = QFontMetrics(font)
-        if fm.horizontalAdvance(text) <= max_text_width:
-            best = mid
-            lo = mid + 1
-        else:
-            hi = mid - 1
-    font.setPixelSize(best)
-    line_edit.setFont(font)
+    return QPixmap.fromImage(qimg.copy())
 
 
 def _review_app_icon() -> QIcon:
@@ -139,7 +87,7 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 class ReviewMainWindow(QMainWindow):
-    """View: chunk selector, crop, editors, navigation — no transcription domain logic."""
+    """Dual-pane review UI with approximate page sync."""
 
     def __init__(
         self,
@@ -150,32 +98,25 @@ class ReviewMainWindow(QMainWindow):
         super().__init__(parent)
         self._working_dir = working_dir.resolve()
         self._chunk_pdf_names = chunk_pdf_names
-        self._crop_pixmap: QPixmap | None = None
-        self._raw_crop: Image.Image | None = None
+        self._line_edits: list[FocusLineEdit] = []
+        self._line_badges: list[QLabel] = []
+        self._line_notes: list[QLabel] = []
+        self._line_rows: list[QWidget] = []
+        self._row_indices: list[int] = []
+        self._page_pixmap: QPixmap | None = None
 
-        # Window chrome and the main vertical column layout.
         root = self._init_window_shell()
-
-        # Top: choose which chunk PDF / session to work on.
         self._add_chunk_pdf_row(root, chunk_pdf_names)
-        # Optional notice when raw JSON includes synthetic page markers we skip in the UI.
-        self._add_skip_notice_label(root)
-        # Show which raw vs final JSON paths apply to the current chunk.
-        self._add_raw_final_paths_section(root)
-        # Current page number and line index within editable lines.
-        self._add_page_line_labels(root)
-        # Crop / PDF errors (e.g. missing image) surface here, not as a blocking dialog.
+        self._add_paths_row(root)
         self._add_error_label(root)
-        # Line crop image plus single-line vs multiline editor (stacked).
-        self._add_crop_and_editor_column(root)
-        # Prev/next/save/reload — disabled until a chunk loads successfully.
+        self._add_dual_pane(root)
         self._add_navigation_button_row(root)
 
         self.set_review_controls_enabled(False)
 
     def _init_window_shell(self) -> QVBoxLayout:
         """Title, icon, default size, central widget, and root ``QVBoxLayout``."""
-        self.setWindowTitle('Line review')
+        self.setWindowTitle('Line review (Approximate Sync)')
         _ic = _review_app_icon()
         if not _ic.isNull():
             self.setWindowIcon(_ic)
@@ -204,61 +145,17 @@ class ReviewMainWindow(QMainWindow):
         chunk_row.addStretch()
         root.addLayout(chunk_row)
 
-    def _add_skip_notice_label(self, root: QVBoxLayout):
-        """Hidden by default; controller shows copy when raw lines include skipped markers."""
-        self._n_skip_lbl = QLabel()
-        self._n_skip_lbl.setWordWrap(False)
-        self._n_skip_lbl.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Maximum,
-        )
-        root.addWidget(self._n_skip_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
-        self._n_skip_lbl.hide()
-
-    def _add_raw_final_paths_section(self, root: QVBoxLayout):
-        """Compact grid: human-readable raw and final JSON filenames for the loaded chunk."""
-        paths_wrap = QWidget()
-        paths_grid = QGridLayout(paths_wrap)
-        paths_grid.setContentsMargins(0, 0, 0, 0)
-        paths_grid.setHorizontalSpacing(12)
-        paths_grid.setVerticalSpacing(2)
-        paths_grid.setColumnStretch(0, 0)
-        paths_grid.setColumnStretch(1, 0)
-        align_lv = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    def _add_paths_row(self, root: QVBoxLayout):
+        row = QHBoxLayout()
+        row.addWidget(QLabel('Raw:'))
         self._raw_path_lbl = QLabel('—')
+        row.addWidget(self._raw_path_lbl)
+        row.addSpacing(14)
+        row.addWidget(QLabel('Final:'))
         self._final_path_lbl = QLabel('—')
-        for lab, val, r in (
-            ('Raw', self._raw_path_lbl, 0),
-            ('Final', self._final_path_lbl, 1),
-        ):
-            a = QLabel(lab)
-            a.setAlignment(align_lv)
-            val.setAlignment(align_lv)
-            paths_grid.addWidget(a, r, 0)
-            paths_grid.addWidget(val, r, 1)
-        paths_wrap.setSizePolicy(
-            QSizePolicy.Policy.Maximum,
-            QSizePolicy.Policy.Maximum,
-        )
-        root.addWidget(paths_wrap, alignment=Qt.AlignmentFlag.AlignLeft)
-
-    def _add_page_line_labels(self, root: QVBoxLayout):
-        """Bold page line plus subtler 'line N of M' — updated per editable row."""
-        self._page_lbl = QLabel()
-        self._line_lbl = QLabel()
-        page_font = self._page_lbl.font()
-        page_font.setPointSizeF(page_font.pointSizeF() + 3)
-        page_font.setBold(True)
-        self._page_lbl.setFont(page_font)
-        line_font = self._line_lbl.font()
-        line_font.setPointSizeF(max(8.0, line_font.pointSizeF() - 0.5))
-        line_font.setBold(False)
-        self._line_lbl.setFont(line_font)
-        _lbl_pol = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        self._page_lbl.setSizePolicy(_lbl_pol)
-        self._line_lbl.setSizePolicy(_lbl_pol)
-        root.addWidget(self._page_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
-        root.addWidget(self._line_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
+        row.addWidget(self._final_path_lbl)
+        row.addStretch()
+        root.addLayout(row)
 
     def _add_error_label(self, root: QVBoxLayout):
         """Amber text for non-fatal issues (e.g. crop generation failed)."""
@@ -271,63 +168,40 @@ class ReviewMainWindow(QMainWindow):
         )
         root.addWidget(self._err_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
 
-    def _add_crop_and_editor_column(self, root: QVBoxLayout):
-        """PDF line crop preview and either single-line or multiline editor below it."""
-        self._crop_label = QLabel()
-        self._crop_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self._crop_label.setContentsMargins(0, 0, 0, 0)
-        self._crop_label.setStyleSheet('QLabel { margin: 0px; padding: 0px; }')
-        self._crop_label.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Maximum,
-        )
+    def _add_dual_pane(self, root: QVBoxLayout):
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        root.addWidget(splitter, stretch=1)
 
-        self._line_edit = QLineEdit()
-        self._line_edit.setStyleSheet(
-            'QLineEdit { padding: 6px 8px; border: 1px solid #bbb; border-radius: 4px; '
-            'margin-top: 0px; margin-bottom: 0px; }'
-        )
-        self._line_edit.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Fixed,
-        )
+        self._scene = QGraphicsScene(self)
+        self._page_item = QGraphicsPixmapItem()
+        self._scene.addItem(self._page_item)
+        self._page_view = QGraphicsView(self._scene)
+        self._page_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        splitter.addWidget(self._page_view)
 
-        self._plain = QPlainTextEdit()
-        self._plain.setFixedHeight(88)
-        self._plain.setStyleSheet(
-            'QPlainTextEdit { padding: 6px 8px; border: 1px solid #bbb; border-radius: 4px; '
-            'margin-top: 0px; margin-bottom: 0px; }'
-        )
-        self._plain.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Fixed,
-        )
-        # One visible editor at a time; stack height follows the current widget only.
-        self._editor_stack = StackedSizeToCurrentWidget()
-        self._editor_stack.addWidget(self._line_edit)
-        self._editor_stack.addWidget(self._plain)
-        self._editor_stack.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Fixed,
-        )
-        self._editor_stack.setContentsMargins(0, 0, 0, 0)
-
-        crop_editor = QVBoxLayout()
-        crop_editor.setSpacing(4)
-        crop_editor.setContentsMargins(0, 0, 0, 0)
-        crop_editor.addWidget(self._crop_label, alignment=Qt.AlignmentFlag.AlignLeft)
-        crop_editor.addWidget(self._editor_stack, alignment=Qt.AlignmentFlag.AlignLeft)
-        root.addLayout(crop_editor)
+        self._line_scroll = QScrollArea()
+        self._line_scroll.setWidgetResizable(True)
+        self._line_host = QWidget()
+        self._line_layout = QVBoxLayout(self._line_host)
+        self._line_layout.setContentsMargins(6, 6, 6, 6)
+        self._line_layout.setSpacing(8)
+        self._line_layout.addStretch()
+        self._line_scroll.setWidget(self._line_host)
+        splitter.addWidget(self._line_scroll)
+        splitter.setSizes([550, 550])
 
     def _add_navigation_button_row(self, root: QVBoxLayout):
         """Line navigation and persistence actions for the current chunk."""
         btn_row = QHBoxLayout()
         self._btn_prev = QPushButton('◀ Prev')
         self._btn_next = QPushButton('Next ▶')
+        self._btn_next_flagged = QPushButton('Next flagged')
         self._btn_save = QPushButton('Save to final JSON')
         self._btn_reload = QPushButton('Reload from raw')
         btn_row.addWidget(self._btn_prev)
         btn_row.addWidget(self._btn_next)
+        btn_row.addWidget(self._btn_next_flagged)
         btn_row.addWidget(self._btn_save)
         btn_row.addWidget(self._btn_reload)
         btn_row.addStretch()
@@ -349,14 +223,9 @@ class ReviewMainWindow(QMainWindow):
         self._chunk_combo.currentIndexChanged.connect(ctrl._on_chunk_combo_index_changed)
         self._btn_prev.clicked.connect(ctrl._on_prev)
         self._btn_next.clicked.connect(ctrl._on_next)
+        self._btn_next_flagged.clicked.connect(ctrl._on_next_flagged)
         self._btn_save.clicked.connect(ctrl._on_save)
         self._btn_reload.clicked.connect(ctrl._on_reload)
-        self._line_edit.textChanged.connect(ctrl._on_text_changed)
-        self._plain.textChanged.connect(ctrl._on_text_changed)
-
-    def max_crop_display_width(self) -> int:
-        w = self.centralWidget().width() if self.centralWidget() else 800
-        return max(320, min(1000, w - 32))
 
     def sync_combo_to_chunk_name(self, chunk_name: str | None) -> None:
         if chunk_name is None:
@@ -371,113 +240,136 @@ class ReviewMainWindow(QMainWindow):
         self._raw_path_lbl.setText(raw_name)
         self._final_path_lbl.setText(final_name)
 
-    def set_skip_notice_visible(self, n_skip: int) -> None:
-        if n_skip:
-            self._n_skip_lbl.setText(
-                f'Skipping {n_skip} synthetic page marker line(s) (`// Page …`). '
-                'They remain in the saved JSON.',
-            )
-            self._n_skip_lbl.show()
-        else:
-            self._n_skip_lbl.clear()
-            self._n_skip_lbl.hide()
-
     def set_review_controls_enabled(self, enabled: bool) -> None:
         self._btn_prev.setEnabled(enabled)
         self._btn_next.setEnabled(enabled)
+        self._btn_next_flagged.setEnabled(enabled)
         self._btn_save.setEnabled(enabled)
         self._btn_reload.setEnabled(enabled)
-        self._line_edit.setEnabled(enabled)
-        self._plain.setEnabled(enabled)
-        self._crop_label.setEnabled(enabled)
 
-    def populate_editable_line(
-        self,
-        raw_crop: Image.Image | None,
-        crop_pixmap: QPixmap | None,
-        err: str | None,
-        page_display: str,
-        line_display: str,
-        text: str,
-        multiline: bool,
-        prev_enabled: bool,
-        next_enabled: bool,
-    ) -> None:
-        self._err_lbl.clear()
-        self._raw_crop = raw_crop
-        self._crop_pixmap = crop_pixmap
-        self._crop_label.clear()
+    def clear_line_rows(self) -> None:
+        while self._line_layout.count() > 1:
+            item = self._line_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._line_edits = []
+        self._line_badges = []
+        self._line_notes = []
+        self._line_rows = []
+        self._row_indices = []
 
-        if err:
-            self._err_lbl.setText(err)
+    def populate_lines(self, session: ChunkLinesSession, ctrl: 'ReviewChunkLinesController') -> None:
+        self.clear_line_rows()
+        for ridx, payload_idx in enumerate(session.editable_indices):
+            line = session.lines[payload_idx]
+            row = QWidget()
+            row_layout = QVBoxLayout(row)
+            row_layout.setContentsMargins(6, 6, 6, 6)
+            row_layout.setSpacing(4)
+            top = QHBoxLayout()
+            top.addWidget(QLabel(f'Line {ridx + 1}'))
+            badge = QLabel((line_confidence_label(line) or 'none').upper())
+            badge.setMinimumWidth(58)
+            top.addWidget(badge)
+            top.addStretch()
+            row_layout.addLayout(top)
 
-        self._page_lbl.setText(page_display)
-        self._line_lbl.setText(line_display)
+            edit = FocusLineEdit(ridx)
+            edit.setText((line.get('text', '') if isinstance(line.get('text', ''), str) else '').rstrip())
+            edit.textChanged.connect(ctrl._on_text_changed)
+            edit.focused.connect(ctrl._on_row_focused)
+            row_layout.addWidget(edit)
 
-        self._line_edit.blockSignals(True)
-        self._plain.blockSignals(True)
-        try:
-            if multiline:
-                self._plain.setPlainText(text)
-                self._editor_stack.setCurrentIndex(1)
-                px = estimate_transcription_font_px(
-                    text,
-                    self._raw_crop.width if self._raw_crop else None,
-                )
-                pf = QFont()
-                pf.setPixelSize(px)
-                pf.setStyleHint(QFont.SansSerif)
-                self._plain.setFont(pf)
+            notes = QLabel(line_notes(line))
+            notes.setWordWrap(True)
+            notes.setVisible(bool(notes.text().strip()))
+            row_layout.addWidget(notes)
+            self._apply_row_confidence_style(row, badge, line_confidence_label(line))
+
+            self._line_layout.insertWidget(self._line_layout.count() - 1, row)
+            self._line_rows.append(row)
+            self._line_edits.append(edit)
+            self._line_badges.append(badge)
+            self._line_notes.append(notes)
+            self._row_indices.append(payload_idx)
+
+    def _apply_row_confidence_style(self, row: QWidget, badge: QLabel, label: str | None) -> None:
+        if label == 'low':
+            row.setStyleSheet('QWidget { background: #2f1919; border: 1px solid #6f2e2e; border-radius: 5px; }')
+            badge.setStyleSheet('QLabel { color: #ffd6d6; font-weight: 700; }')
+        elif label == 'medium':
+            row.setStyleSheet('QWidget { background: #2f2a18; border: 1px solid #796324; border-radius: 5px; }')
+            badge.setStyleSheet('QLabel { color: #fff2be; font-weight: 700; }')
+        else:
+            row.setStyleSheet('QWidget { border: 1px solid #444; border-radius: 5px; }')
+            badge.setStyleSheet('QLabel { color: #cfcfcf; font-weight: 600; }')
+
+    def set_active_row(self, ridx: int) -> None:
+        for i, row in enumerate(self._line_rows):
+            if i == ridx:
+                palette = row.palette()
+                palette.setColor(QPalette.Window, QColor(36, 53, 84))
+                row.setPalette(palette)
+                row.setAutoFillBackground(True)
             else:
-                self._line_edit.setText(text)
-                self._editor_stack.setCurrentIndex(0)
-        finally:
-            self._line_edit.blockSignals(False)
-            self._plain.blockSignals(False)
+                row.setAutoFillBackground(False)
+        if 0 <= ridx < len(self._line_edits):
+            self._line_edits[ridx].setFocus()
+            self._line_edits[ridx].selectAll()
+            self._line_scroll.ensureWidgetVisible(self._line_edits[ridx], 0, 100)
 
+    def set_page_image(self, page_image: Image.Image | None) -> None:
+        if page_image is None:
+            self._page_item.setPixmap(QPixmap())
+            self._page_pixmap = None
+            return
+        self._page_pixmap = pil_to_qpixmap(page_image)
+        self._page_item.setPixmap(self._page_pixmap)
+        self._scene.setSceneRect(self._page_item.boundingRect())
+        self._page_view.fitInView(self._page_item, Qt.KeepAspectRatio)
+
+    def center_page_on_normalized_y(self, normalized_y: float) -> None:
+        if self._page_pixmap is None or self._page_pixmap.isNull():
+            return
+        page_h = self._page_pixmap.height()
+        target_y = int((normalized_y / float(BOX_2D_NORMALIZED_MAX)) * page_h)
+        self._smooth_center_on_y(target_y)
+
+    def _smooth_center_on_y(self, y: int) -> None:
+        self._page_view.centerOn(0, y)
+
+    def line_text(self, ridx: int) -> str:
+        if 0 <= ridx < len(self._line_edits):
+            return self._line_edits[ridx].text()
+        return ''
+
+    def set_prev_next_enabled(self, prev_enabled: bool, next_enabled: bool) -> None:
         self._btn_prev.setEnabled(prev_enabled)
         self._btn_next.setEnabled(next_enabled)
 
-        QTimer.singleShot(0, self.apply_crop_scale_and_font)
 
-    def apply_crop_scale_and_font(self) -> None:
-        if self._raw_crop is None or self._crop_pixmap is None or self._crop_pixmap.isNull():
-            return
-        max_w = self.max_crop_display_width()
-        ow = self._crop_pixmap.width()
-        if ow > max_w:
-            scaled = self._crop_pixmap.scaledToWidth(
-                max_w,
-                Qt.SmoothTransformation,
-            )
-        else:
-            scaled = self._crop_pixmap
-        self._crop_label.setPixmap(scaled)
-        self._crop_label.setFixedWidth(scaled.width())
+class FocusLineEdit(QLineEdit):
+    def __init__(self, ridx: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._ridx = ridx
+        self.focused = FocusEmitter()
 
-        self._line_edit.setFixedWidth(scaled.width())
-        self._plain.setFixedWidth(scaled.width())
-        self._editor_stack.setFixedWidth(scaled.width())
-        if self._editor_stack.currentIndex() == 0:
-            self.fit_editor_font_only()
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        self.focused.emit(self._ridx)
 
-    def fit_editor_font_only(self) -> None:
-        if self._editor_stack.currentIndex() != 0:
-            return
-        inner = max(80, self._line_edit.width() - 16)
-        fit_line_edit_font(self._line_edit, inner)
 
-    def schedule_fit_font(self) -> None:
-        QTimer.singleShot(0, self.fit_editor_font_only)
+class FocusEmitter:
+    def __init__(self) -> None:
+        self._callbacks = []
 
-    def commit_text_from_editors(self) -> str:
-        if self._editor_stack.currentIndex() == 1:
-            return self._plain.toPlainText()
-        return self._line_edit.text()
+    def connect(self, callback):
+        self._callbacks.append(callback)
 
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        QTimer.singleShot(0, self.apply_crop_scale_and_font)
+    def emit(self, ridx: int) -> None:
+        for cb in self._callbacks:
+            cb(ridx)
 
 
 class ReviewChunkLinesController:
@@ -507,7 +399,6 @@ class ReviewChunkLinesController:
 
     def _on_text_changed(self) -> None:
         self._session.dirty = True
-        self._view.schedule_fit_font()
 
     def _sync_combo_to_loaded_chunk(self) -> None:
         if self._session.paths is None:
@@ -537,15 +428,11 @@ class ReviewChunkLinesController:
                 self._sync_combo_to_loaded_chunk()
                 return
             if reply == QMessageBox.Save:
-                self._commit_current()
+                self._commit_all()
                 self._session.save_to_final()
                 self._session.dirty = False
         if not self._load_chunk(chunk_name, show_error=True):
             self._sync_combo_to_loaded_chunk()
-
-    def _commit_current(self) -> None:
-        text = self._view.commit_text_from_editors()
-        self._session.commit_editable_text(text)
 
     def _load_chunk(self, chunk_name: str, show_error: bool) -> bool:
         err = self._session.load_chunk(
@@ -563,9 +450,7 @@ class ReviewChunkLinesController:
 
         self._view.setWindowTitle(f'Line review — {paths.chunk_name}')
         self._view.set_path_labels(paths.raw_path.name, paths.final_path.name)
-        n_skip = len(self._session.lines) - len(self._session.editable_indices)
-        self._view.set_skip_notice_visible(n_skip)
-
+        self._view.populate_lines(self._session, self)
         self._view.set_review_controls_enabled(True)
         self._show_line()
         return True
@@ -577,37 +462,19 @@ class ReviewChunkLinesController:
         ridx = s.editable_ridx
         line = s.line_at_editable_ridx()
         page_number = line.get('page_number')
-        text = line.get('text', '')
-        if not isinstance(text, str):
-            text = ''
-        text = text.rstrip()
-
-        raw_crop, cerr = s.crop_for_current_editable()
-        pixmap = pil_to_qpixmap(raw_crop) if raw_crop is not None else None
-
-        pn = str(page_number) if isinstance(page_number, int) and page_number >= 1 else '—'
-        page_display = f'Page {pn}'
-        line_display = f'Line {ridx + 1} / {n_editable}'
-
-        # True when this row's text field spans multiple lines: model/JSON edits with
-        # embedded newlines, verse or lists in one box, or wrapped output for a region.
-        multiline = '\n' in text
-        self._view.populate_editable_line(
-            raw_crop,
-            pixmap,
-            cerr,
-            page_display,
-            line_display,
-            text,
-            multiline,
-            ridx > 0,
-            ridx < n_editable - 1,
-        )
+        if isinstance(page_number, int) and 1 <= page_number <= len(s.page_images):
+            self._view.set_page_image(s.page_images[page_number - 1])
+        else:
+            self._view.set_page_image(None)
+        self._view.set_active_row(ridx)
+        center = normalized_center_y_for_line(line)
+        if center is not None:
+            self._view.center_page_on_normalized_y(center)
+        self._view.set_prev_next_enabled(ridx > 0, ridx < n_editable - 1)
 
     def _on_prev(self) -> None:
         if not self._session.is_loaded or self._session.editable_ridx <= 0:
             return
-        self._commit_current()
         self._session.editable_ridx -= 1
         self._show_line()
 
@@ -615,14 +482,31 @@ class ReviewChunkLinesController:
         s = self._session
         if not s.is_loaded or s.editable_ridx >= len(s.editable_indices) - 1:
             return
-        self._commit_current()
         s.editable_ridx += 1
         self._show_line()
+
+    def _on_row_focused(self, ridx: int) -> None:
+        if not self._session.is_loaded:
+            return
+        self._session.editable_ridx = ridx
+        self._show_line()
+
+    def _on_next_flagged(self) -> None:
+        s = self._session
+        if not s.is_loaded:
+            return
+        start = s.editable_ridx + 1
+        for ridx in range(start, len(s.editable_indices)):
+            line = s.lines[s.editable_indices[ridx]]
+            if line_confidence_label(line) in {'low', 'medium'}:
+                s.editable_ridx = ridx
+                self._show_line()
+                return
 
     def _on_save(self) -> None:
         if not self._session.is_loaded:
             return
-        self._commit_current()
+        self._commit_all()
         paths = self._session.paths
         assert paths is not None
         self._session.save_to_final()
@@ -632,7 +516,6 @@ class ReviewChunkLinesController:
     def _on_reload(self) -> None:
         if not self._session.is_loaded:
             return
-        self._commit_current()
         reply = QMessageBox.question(
             self._view,
             'Reload from raw',
@@ -646,7 +529,12 @@ class ReviewChunkLinesController:
         if err is not None:
             QMessageBox.warning(self._view, 'Reload', err)
             return
+        self._view.populate_lines(self._session, self)
         self._show_line()
+
+    def _commit_all(self) -> None:
+        for ridx, idx in enumerate(self._session.editable_indices):
+            self._session.lines[idx]['text'] = self._view.line_text(ridx).rstrip()
 
 
 def main() -> int:

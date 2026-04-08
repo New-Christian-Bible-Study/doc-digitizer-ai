@@ -4,7 +4,7 @@
   "description": "LLM response: per-line text with spatial boxes and confidence metadata",
   "type": "object",
   "additionalProperties": false,
-  "required": ["lines", "confidence_score", "confidence_label", "notes"],
+  "required": ["lines", "confidence_score", "confidence_label"],
   "properties": {
     "lines": {
       "type": "array",
@@ -33,6 +33,15 @@
             },
             "minItems": 4,
             "maxItems": 4
+          },
+          "confidence_label": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Per-line confidence level for triage"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Per-line rationale for uncertainty; required when line confidence is low"
           }
         }
       }
@@ -50,25 +59,51 @@
     },
     "notes": {
       "type": "string",
-      "description": "Diagnostic notes; required substantive content when confidence is low or medium"
+      "description": "Deprecated top-level notes field kept for backward compatibility"
     }
   },
   "allOf": [
     {
       "if": {
         "properties": {
-          "confidence_label": {
-            "enum": ["low", "medium"]
+          "lines": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "confidence_label": {
+                  "const": "low"
+                }
+              },
+              "required": ["confidence_label"]
+            }
           }
         }
       },
       "then": {
         "properties": {
-          "notes": {
-            "minLength": 1
+          "lines": {
+            "type": "array",
+            "items": {
+              "if": {
+                "properties": {
+                  "confidence_label": {
+                    "const": "low"
+                  }
+                },
+                "required": ["confidence_label"]
+              },
+              "then": {
+                "required": ["notes"],
+                "properties": {
+                  "notes": {
+                    "minLength": 1
+                  }
+                }
+              }
+            }
           }
-        },
-        "required": ["notes"]
+        }
       }
     }
   ]

@@ -1,8 +1,8 @@
 {
   "model": "gemini/gemini-3.1-pro-preview",
   "timeout_seconds": 900,
-  "temperature": 0.0,
-  "reasoning_effort": "high",
+  "temperature": 1.0,
+  "reasoning_effort": "medium",
   "media_resolution": "high",
-  "sys_instructions": "Respond with JSON only matching the provided schema. Key order: lines, confidence_score, confidence_label, notes. The \"lines\" array must contain one object per visible text line in reading order; each object has page_number (integer, 1-based within this chunk), text (string), and box_2d (four integers [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates for that line on that page). confidence_score must be a number from 0.0 to 1.0. confidence_label must be one of: 'low', 'medium', 'high'. For every confidence score below 1.0, the 'notes' field must contain a diagnostic list of specific ambiguities. For each instance, specify the line index or the word snippet followed by the conflict (for example, 'Line 8: \"s\" or \"f\" in \"blessing\"?'). Strictly avoid general descriptions of the document or praise for formatting. If the score is 1.0, the 'notes' field should be an empty string."
+  "sys_instructions": "Respond with JSON only matching the provided schema. Key order: lines, confidence_score, confidence_label. The \"lines\" array must contain one object per visible text line in reading order; each object has page_number (integer, 1-based within this chunk), text (string), box_2d (four integers [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates), confidence_label ('low'|'medium'|'high'), and notes (string). When a line confidence_label is 'low', that line's notes must be non-empty and describe the specific ambiguity for that line. For medium/high lines, notes may be empty unless there is useful context. confidence_score must be a number from 0.0 to 1.0. Top-level confidence_label must be one of: 'low', 'medium', 'high'. Strictly avoid general descriptions of the document or praise for formatting."
 }

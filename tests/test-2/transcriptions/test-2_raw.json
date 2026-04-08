@@ -8,162 +8,194 @@
         0,
         0,
         0
-      ]
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "This content serves as a test of",
       "box_2d": [
-        70,
-        362,
-        85,
-        636
-      ]
+        68,
+        368,
+        83,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "preserving line breaks in",
       "box_2d": [
-        88,
-        362,
-        103,
-        636
-      ]
+        86,
+        368,
+        101,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "paragraphs found in the original",
       "box_2d": [
-        106,
-        362,
-        121,
-        636
-      ]
+        102,
+        368,
+        118,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "text to be transcribed. Doing so",
       "box_2d": [
-        124,
-        362,
-        139,
-        636
-      ]
+        120,
+        368,
+        134,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "can aid in verifying the",
       "box_2d": [
-        142,
-        362,
-        157,
-        636
-      ]
+        136,
+        368,
+        151,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "transcription by person by having",
       "box_2d": [
-        160,
-        362,
-        175,
-        636
-      ]
+        153,
+        368,
+        168,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "the original in one window on the",
       "box_2d": [
-        178,
-        362,
-        193,
-        636
-      ]
+        170,
+        368,
+        185,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "computer monitor next to another",
       "box_2d": [
-        196,
-        362,
-        211,
-        636
-      ]
+        187,
+        368,
+        201,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "window with the transcription so",
       "box_2d": [
-        214,
-        362,
-        229,
-        636
-      ]
+        204,
+        368,
+        218,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "that each line in both windows",
       "box_2d": [
-        232,
-        362,
-        247,
-        636
-      ]
+        220,
+        368,
+        235,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "can be directly compared.",
       "box_2d": [
-        250,
-        362,
-        265,
-        570
-      ]
+        237,
+        368,
+        252,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "In addition, this content serves to",
       "box_2d": [
-        280,
-        362,
-        295,
-        636
-      ]
+        270,
+        368,
+        285,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "test that hyphenation is removed",
       "box_2d": [
-        298,
-        362,
-        313,
-        636
-      ]
+        287,
+        368,
+        302,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     },
     {
       "page_number": 1,
       "text": "as needed so that it no preservation",
       "box_2d": [
-        316,
-        362,
-        331,
-        636
-      ]
+        304,
+        368,
+        319,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": "Resolved split word: 'preserv-ation'."
     },
     {
       "page_number": 1,
       "text": "of the hyphen is done.",
       "box_2d": [
-        334,
-        362,
-        349,
-        586
-      ]
+        320,
+        368,
+        335,
+        631
+      ],
+      "confidence_label": "high",
+      "notes": ""
     }
   ],
   "confidence_score": 1.0,
   "confidence_label": "high",
   "notes": "",
   "model": "gemini/gemini-3.1-pro-preview",
-  "configuration": "temperature=0.0, media_resolution=high, reasoning_effort=high"
+  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
 }

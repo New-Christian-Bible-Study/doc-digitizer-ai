@@ -334,6 +334,8 @@ def normalize_lines_from_model(raw_lines: object) -> list[dict]:
                 'page_number': item.get('page_number'),
                 'text': normalize_transcription_newlines(item.get('text', '')),
                 'box_2d': item.get('box_2d'),
+                'confidence_label': item.get('confidence_label'),
+                'notes': item.get('notes', ''),
             }
         )
     return normalized
@@ -344,7 +346,8 @@ def build_llm_payload_for_validation(raw: dict) -> dict:
         'lines': normalize_lines_from_model(raw.get('lines')),
         'confidence_score': raw.get('confidence_score'),
         'confidence_label': raw.get('confidence_label'),
-        'notes': raw.get('notes'),
+        # Retained for backward compatibility while line-level notes are preferred.
+        'notes': raw.get('notes', ''),
     }
 
 
@@ -356,7 +359,7 @@ def build_full_transcription_payload(
         'lines': llm_payload['lines'],
         'confidence_score': llm_payload['confidence_score'],
         'confidence_label': llm_payload['confidence_label'],
-        'notes': llm_payload['notes'],
+        'notes': llm_payload.get('notes', ''),
         'model': transcribe_config['model'],
         'configuration': (
             f'temperature={transcribe_config["temperature"]}, '
@@ -369,8 +372,10 @@ def build_full_transcription_payload(
 def is_notes_min_length_validation_error(exc: jsonschema.ValidationError) -> bool:
     validator_is_min_length = exc.validator == 'minLength'
     validator_value_is_one = exc.validator_value == 1
-    field_is_notes = list(exc.absolute_path) == ['notes']
-    schema_points_to_notes = list(exc.absolute_schema_path)[-2:] == ['notes', 'minLength']
+    path = list(exc.absolute_path)
+    field_is_notes = path and path[-1] == 'notes'
+    schema_path = list(exc.absolute_schema_path)
+    schema_points_to_notes = schema_path and schema_path[-1] == 'minLength'
     return (
         validator_is_min_length
         and validator_value_is_one

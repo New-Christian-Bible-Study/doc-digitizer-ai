@@ -1,13 +1,13 @@
 # AI transcription run log
 
 - Chunk PDF file: `test-2.pdf`
-- Run started at: `2026-04-03 09:32`
+- Run started at: `2026-04-08 12:43`
 - Total pages: `1`
-- Total inference time (minutes): `0.54`
-- Average time per page (seconds): `32.63`
-- Prompt tokens (input): `1886`
-- Completion tokens (output): `3480`
-- Total tokens: `5366`
+- Total inference time (minutes): `0.43`
+- Average time per page (seconds): `25.60`
+- Prompt tokens (input): `1925`
+- Completion tokens (output): `3103`
+- Total tokens: `5028`
 - Confidence score: `1.0`
 - Confidence label: `high`
 - Notes: 
@@ -16,10 +16,11 @@
 ```json
 {
   "model": "gemini/gemini-3.1-pro-preview",
-  "temperature": 0.0,
-  "reasoning_effort": "high",
+  "timeout_seconds": 900,
+  "temperature": 1.0,
+  "reasoning_effort": "medium",
   "media_resolution": "high",
-  "sys_instructions": "Respond with JSON only matching the provided schema. Key order: lines, confidence_score, confidence_label, notes. The \"lines\" array must contain one object per visible text line in reading order; each object has page_number (integer, 1-based within this chunk), text (string), and box_2d (four integers [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates for that line on that page). confidence_score must be a number from 0.0 to 1.0. confidence_label must be one of: 'low', 'medium', 'high'. For every confidence score below 1.0, the 'notes' field must contain a diagnostic list of specific ambiguities. For each instance, specify the line index or the word snippet followed by the conflict (for example, 'Line 8: \"s\" or \"f\" in \"blessing\"?'). Strictly avoid general descriptions of the document or praise for formatting. If the score is 1.0, the 'notes' field should be an empty string."
+  "sys_instructions": "Respond with JSON only matching the provided schema. Key order: lines, confidence_score, confidence_label. The \"lines\" array must contain one object per visible text line in reading order; each object has page_number (integer, 1-based within this chunk), text (string), box_2d (four integers [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates), confidence_label ('low'|'medium'|'high'), and notes (string). When a line confidence_label is 'low', that line's notes must be non-empty and describe the specific ambiguity for that line. For medium/high lines, notes may be empty unless there is useful context. confidence_score must be a number from 0.0 to 1.0. Top-level confidence_label must be one of: 'low', 'medium', 'high'. Strictly avoid general descriptions of the document or praise for formatting."
 }
 ```
 
@@ -38,8 +39,10 @@ Return a single JSON **object** with a key `"lines"` whose value is an array. Ev
 1. `"page_number"`: The page within **this chunk PDF** where the text appears. Use **1-based** indexing: the first page of the chunk is `1`, the second is `2`, and so on (this matches `images[page_number - 1]` when the chunk is rasterized page-by-page).
 2. `"text"`: The transcription of the line following the rules below.
 3. `"box_2d"`: `[ymin, xmin, ymax, xmax]` coordinates for the line bounding region, **normalized 0–1000** (integers) relative to that page’s width and height.
+4. `"confidence_label"`: One of `low`, `medium`, or `high` for this specific line.
+5. `"notes"`: Per-line rationale for uncertainty. Required and non-empty when `"confidence_label"` is `low`; otherwise use an empty string unless there is useful context.
 
-Also include top-level fields `confidence_score`, `confidence_label`, and `notes` exactly as required by the system instructions.
+Also include top-level fields `confidence_score` and `confidence_label` exactly as required by the system instructions.
 
 **Transcription Rules (for the "text" field):**
 - **Literalness:** Transcribe the text exactly as it appears.

@@ -253,6 +253,34 @@ def crop_for_line(
     return page_img.crop((left, upper, right, lower)), None
 
 
+def normalized_center_y_for_line(line: dict) -> float | None:
+    """Return line vertical center on the 0-1000 grid, or ``None`` if invalid."""
+    box_2d = line.get('box_2d')
+    if not isinstance(box_2d, list) or len(box_2d) != 4:
+        return None
+    try:
+        ymin = float(box_2d[0])
+        ymax = float(box_2d[2])
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(float(BOX_2D_NORMALIZED_MAX), (ymin + ymax) / 2.0))
+
+
+def line_confidence_label(line: dict) -> str | None:
+    value = line.get('confidence_label')
+    if not isinstance(value, str):
+        return None
+    label = value.strip().lower()
+    if label not in {'low', 'medium', 'high'}:
+        return None
+    return label
+
+
+def line_notes(line: dict) -> str:
+    value = line.get('notes', '')
+    return value if isinstance(value, str) else ''
+
+
 class ChunkLinesSession:
     """Mutable state for one loaded chunk: transcription JSON, page rasters, editable-line cursor."""
 

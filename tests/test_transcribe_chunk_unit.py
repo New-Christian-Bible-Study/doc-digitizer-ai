@@ -5,6 +5,7 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from types import SimpleNamespace
 
+import jsonschema
 import pytest
 
 
@@ -208,7 +209,8 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
                     message=SimpleNamespace(
                         content=(
                             '{"lines":[{"page_number":1,"text":"hello",'
-                            '"box_2d":[0,0,100,100]}],'
+                                '"box_2d":[0,0,100,100],'
+                                '"confidence_label":"high","notes":""}],'
                             '"confidence_score":1.0,"confidence_label":"high",'
                             '"notes":""}'
                         )
@@ -247,3 +249,23 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
     assert '- Prompt tokens (input): `10`' in ai_log
     assert '- Completion tokens (output): `20`' in ai_log
     assert '- Total tokens: `30`' in ai_log
+
+
+def test_schema_requires_line_notes_for_low_confidence():
+    module = load_transcribe_module()
+    schema = module.load_schema()
+    payload = {
+        'lines': [
+            {
+                'page_number': 1,
+                'text': 'unclear line',
+                'box_2d': [0, 0, 100, 100],
+                'confidence_label': 'low',
+                'notes': '',
+            }
+        ],
+        'confidence_score': 0.5,
+        'confidence_label': 'medium',
+    }
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=payload, schema=schema)

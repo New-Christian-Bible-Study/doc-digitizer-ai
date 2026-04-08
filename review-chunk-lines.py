@@ -352,7 +352,8 @@ class ReviewMainWindow(QMainWindow):
         self._page_pixmap = pil_to_qpixmap(page_image)
         self._page_item.setPixmap(self._page_pixmap)
         self._scene.setSceneRect(self._page_item.boundingRect())
-        self.reset_zoom_to_fit()
+        # Preserve current zoom when focus changes lines/pages; only Ctrl+0 resets.
+        self._refit_and_restore_focus_center()
 
     def center_page_on_normalized_y(self, normalized_y: float) -> None:
         if self._page_pixmap is None or self._page_pixmap.isNull():
@@ -363,7 +364,8 @@ class ReviewMainWindow(QMainWindow):
         self._smooth_center_on_y(target_y)
 
     def _smooth_center_on_y(self, y: int) -> None:
-        self._page_view.centerOn(0, y)
+        current_center = self._page_view.mapToScene(self._page_view.viewport().rect().center())
+        self._page_view.centerOn(current_center.x(), y)
 
     def _fit_page_to_pane_width(self) -> None:
         if self._page_pixmap is None or self._page_pixmap.isNull():

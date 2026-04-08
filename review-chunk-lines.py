@@ -9,11 +9,12 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QImage, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QIcon, QImage, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
     QHBoxLayout,
@@ -183,6 +184,12 @@ class ReviewMainWindow(QMainWindow):
         self._scene = QGraphicsScene(self)
         self._page_item = QGraphicsPixmapItem()
         self._scene.addItem(self._page_item)
+        self._active_line_box_item = QGraphicsRectItem()
+        self._active_line_box_item.setPen(QPen(QColor(61, 149, 255, 230), 2))
+        self._active_line_box_item.setBrush(QColor(61, 149, 255, 35))
+        self._active_line_box_item.setZValue(5)
+        self._active_line_box_item.setVisible(False)
+        self._scene.addItem(self._active_line_box_item)
         self._page_view = QGraphicsView(self._scene)
         self._page_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._page_view.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -349,6 +356,7 @@ class ReviewMainWindow(QMainWindow):
         if page_image is None:
             self._page_item.setPixmap(QPixmap())
             self._page_pixmap = None
+            self._active_line_box_item.setVisible(False)
             return
         self._page_pixmap = pil_to_qpixmap(page_image)
         self._page_item.setPixmap(self._page_pixmap)
@@ -363,6 +371,57 @@ class ReviewMainWindow(QMainWindow):
         page_h = self._page_pixmap.height()
         target_y = int((normalized_y / float(BOX_2D_NORMALIZED_MAX)) * page_h)
         self._smooth_center_on_y(target_y)
+
+    def show_active_line_box(self, line: dict) -> None:
+        if self._page_pixmap is None or self._page_pixmap.isNull():
+            self._active_line_box_item.setVisible(False)
+            return
+        box_2d = line.get('box_2d')
+        if not isinstance(box_2d, list) or len(box_2d) != 4:
+            self._active_line_box_item.setVisible(False)
+            return
+
+        try:
+            ymin = float(box_2d[0])
+            xmin = float(box_2d[1])
+            ymax = float(box_2d[2])
+            xmax = float(box_2d[3])
+        except (TypeError, ValueError):
+            self._active_line_box_item.setVisible(False)
+            return
+
+        page_w = self._page_pixmap.width()
+        page_h = self._page_pixmap.height()
+        g = float(BOX_2D_NORMALIZED_MAX)
+
+        left = int(round((xmin / g) * page_w))
+        right = int(round((xmax / g) * page_w))
+        top = int(round((ymin / g) * page_h))
+        bottom = int(round((ymax / g) * page_h))
+
+        left = max(0, min(left, page_w))
+        right = max(0, min(right, page_w))
+        top = max(0, min(top, page_h))
+        bottom = max(0, min(bottom, page_h))
+
+        if right <= left:
+            right = min(page_w, left + 1)
+        if bottom <= top:
+            bottom = min(page_h, top + 1)
+
+        # Expand the visual hint box (especially vertically) to absorb model drift.
+        box_h = bottom - top
+        box_w = right - left
+        pad_y = max(6, min(28, box_h // 2))
+        pad_x = max(3, min(16, box_w // 8))
+
+        left = max(0, left - pad_x)
+        right = min(page_w, right + pad_x)
+        top = max(0, top - pad_y)
+        bottom = min(page_h, bottom + pad_y)
+
+        self._active_line_box_item.setRect(left, top, max(1, right - left), max(1, bottom - top))
+        self._active_line_box_item.setVisible(True)
 
     def _smooth_center_on_y(self, y: int) -> None:
         current_center = self._page_view.mapToScene(self._page_view.viewport().rect().center())
@@ -550,6 +609,7 @@ class ReviewChunkLinesController:
         else:
             self._view.set_page_image(None)
         self._view.set_active_row(ridx)
+        self._view.show_active_line_box(line)
         center = normalized_center_y_for_line(line)
         if center is not None:
             self._view.center_page_on_normalized_y(center)

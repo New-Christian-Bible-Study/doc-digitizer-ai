@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QImage, QPalette, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QIcon, QImage, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -102,6 +102,9 @@ class ReviewMainWindow(QMainWindow):
         self._line_badges: list[QLabel] = []
         self._line_notes: list[QLabel] = []
         self._line_rows: list[QWidget] = []
+        self._line_warning_labels: list[QLabel | None] = []
+        self._line_original_texts: list[str] = []
+        self._line_conf_labels: list[str] = []
         self._row_indices: list[int] = []
         self._page_pixmap: QPixmap | None = None
         self._last_center_y: float | None = None
@@ -273,6 +276,9 @@ class ReviewMainWindow(QMainWindow):
         self._line_badges = []
         self._line_notes = []
         self._line_rows = []
+        self._line_warning_labels = []
+        self._line_original_texts = []
+        self._line_conf_labels = []
         self._row_indices = []
 
     def populate_lines(self, session: ChunkLinesSession, ctrl: 'ReviewChunkLinesController') -> None:
@@ -297,10 +303,16 @@ class ReviewMainWindow(QMainWindow):
                 warn.setWordWrap(True)
                 warn.setStyleSheet('QLabel { font-weight: 700; }')
                 row_layout.addWidget(warn)
+            else:
+                warn = None
 
             edit = FocusLineEdit(ridx)
-            edit.setText((line.get('text', '') if isinstance(line.get('text', ''), str) else '').rstrip())
+            original_text = (
+                line.get('text', '') if isinstance(line.get('text', ''), str) else ''
+            ).rstrip()
+            edit.setText(original_text)
             edit.textChanged.connect(ctrl._on_text_changed)
+            edit.textChanged.connect(lambda _text, i=ridx: self._on_editor_text_changed(i))
             edit.focused.connect(ctrl._on_row_focused)
             row_layout.addWidget(edit)
             self._apply_row_confidence_style(row, badge, conf)
@@ -310,6 +322,9 @@ class ReviewMainWindow(QMainWindow):
             self._line_edits.append(edit)
             self._line_badges.append(badge)
             self._line_notes.append(QLabel(''))
+            self._line_warning_labels.append(warn)
+            self._line_original_texts.append(original_text)
+            self._line_conf_labels.append(conf)
             self._row_indices.append(payload_idx)
 
     def _apply_row_confidence_style(self, row: QWidget, badge: QLabel, label: str | None) -> None:
@@ -324,14 +339,6 @@ class ReviewMainWindow(QMainWindow):
             badge.setStyleSheet('QLabel { color: #cfcfcf; font-weight: 600; }')
 
     def set_active_row(self, ridx: int) -> None:
-        for i, row in enumerate(self._line_rows):
-            if i == ridx:
-                palette = row.palette()
-                palette.setColor(QPalette.Window, QColor(36, 53, 84))
-                row.setPalette(palette)
-                row.setAutoFillBackground(True)
-            else:
-                row.setAutoFillBackground(False)
         if 0 <= ridx < len(self._line_edits):
             self._line_edits[ridx].setFocus()
             self._line_edits[ridx].selectAll()
@@ -398,6 +405,28 @@ class ReviewMainWindow(QMainWindow):
     def set_prev_next_enabled(self, prev_enabled: bool, next_enabled: bool) -> None:
         self._btn_prev.setEnabled(prev_enabled)
         self._btn_next.setEnabled(next_enabled)
+
+    def _on_editor_text_changed(self, ridx: int) -> None:
+        if not (0 <= ridx < len(self._line_edits)):
+            return
+        conf = self._line_conf_labels[ridx] if ridx < len(self._line_conf_labels) else 'high'
+        if conf == 'high':
+            return
+        warn = (
+            self._line_warning_labels[ridx]
+            if ridx < len(self._line_warning_labels)
+            else None
+        )
+        if warn is None:
+            return
+        current_text = self._line_edits[ridx].text().rstrip()
+        changed = current_text != self._line_original_texts[ridx]
+        if changed:
+            warn.setStyleSheet(
+                'QLabel { font-weight: 700; text-decoration: line-through; opacity: 0.75; }'
+            )
+        else:
+            warn.setStyleSheet('QLabel { font-weight: 700; }')
 
 
 class FocusLineEdit(QLineEdit):

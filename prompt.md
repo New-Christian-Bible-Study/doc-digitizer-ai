@@ -20,7 +20,7 @@ Also include top-level fields `confidence_score` and `confidence_label` exactly 
 - **Hyphenation:** If a word is split across two lines by a hyphen, remove the hyphen and join the parts of the word together on the line where the word began.
 - **Paragraph Numbers:** Prefix paragraph or verse numbers with `{empty}` (e.g., `{empty}123.`).
 - **Structure:** - Use AsciiDoc headers (`==`, `===`) for titles/major headings.
-    - If a new page starts, ensure the `page_number` increments, and the first line of the new page is transcribed as `// Page X`.
+    - If a new page starts, ensure the `page_number` increments appropriately. Do NOT insert any synthetic markers like `// Page X`.
 - **Preservation:**
     - Preserve archaic spellings and punctuation.
     - **Font Styles:** Use AsciiDoc syntax (`_italic_` and `*bold*`).

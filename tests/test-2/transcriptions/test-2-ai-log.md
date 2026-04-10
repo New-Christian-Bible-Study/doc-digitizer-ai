@@ -1,14 +1,14 @@
 # AI transcription run log
 
 - Chunk PDF file: `test-2.pdf`
-- Run started at: `2026-04-08 12:43`
+- Run started at: `2026-04-09 15:00`
 - Total pages: `1`
-- Total inference time (minutes): `0.43`
-- Average time per page (seconds): `25.60`
-- Prompt tokens (input): `1925`
-- Completion tokens (output): `3103`
-- Total tokens: `5028`
-- Confidence score: `1.0`
+- Total inference time (minutes): `0.37`
+- Average time per page (seconds): `22.40`
+- Prompt tokens (input): `1922`
+- Completion tokens (output): `2558`
+- Total tokens: `4480`
+- Confidence score: `0.99`
 - Confidence label: `high`
 - Notes: 
 ## Transcribe config used
@@ -49,7 +49,7 @@ Also include top-level fields `confidence_score` and `confidence_label` exactly 
 - **Hyphenation:** If a word is split across two lines by a hyphen, remove the hyphen and join the parts of the word together on the line where the word began.
 - **Paragraph Numbers:** Prefix paragraph or verse numbers with `{empty}` (e.g., `{empty}123.`).
 - **Structure:** - Use AsciiDoc headers (`==`, `===`) for titles/major headings.
-    - If a new page starts, ensure the `page_number` increments, and the first line of the new page is transcribed as `// Page X`.
+    - If a new page starts, ensure the `page_number` increments appropriately. Do NOT insert any synthetic markers like `// Page X`.
 - **Preservation:**
     - Preserve archaic spellings and punctuation.
     - **Font Styles:** Use AsciiDoc syntax (`_italic_` and `*bold*`).

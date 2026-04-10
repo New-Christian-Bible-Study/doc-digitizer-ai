@@ -37,6 +37,16 @@ CROP_PAD_X_MIN_PX = 1
 CROP_PAD_X_BOX_W_DIVISOR = 50
 CROP_PAD_X_BOX_W_OFFSET = 1
 
+# Snap-to-ink tuning for line-level projection profiling.
+SNAP_DARK_PIXEL_THRESHOLD = 175
+SNAP_SMOOTH_RADIUS = 2
+SNAP_SEARCH_MARGIN_MIN_PX = 28
+SNAP_SEARCH_MARGIN_BOX_H_DIVISOR = 1
+SNAP_MIN_DARK_PIXELS = 8
+SNAP_MIN_DARK_PIXELS_WINDOW_DIVISOR = 80
+SNAP_VALLEY_RATIO = 0.35
+SNAP_MIN_BAND_HEIGHT_PX = 2
+
 # Prompt-injected markers (not printed on the page).
 # Must stay aligned with Pass 1 prompt / any transcribe normalization of line text.
 _PAGE_MARKER_PATTERN = re.compile(r'^\s*//\s*Page\s+\d+\s*$', re.IGNORECASE)
@@ -203,6 +213,133 @@ def clamp_box_2d_to_pixels(
     if lower <= upper:
         lower = min(height, upper + 1)
     return left, upper, right, lower
+
+
+def _parse_box_2d(box_2d: object) -> tuple[float, float, float, float] | None:
+    if not isinstance(box_2d, list) or len(box_2d) != 4:
+        return None
+    try:
+        ymin = float(box_2d[0])
+        xmin = float(box_2d[1])
+        ymax = float(box_2d[2])
+        xmax = float(box_2d[3])
+    except (TypeError, ValueError):
+        return None
+    return ymin, xmin, ymax, xmax
+
+
+def _normalize_box_axis_pair(a: float, b: float, axis_max: int) -> tuple[int, int]:
+    lo = int(round(min(a, b)))
+    hi = int(round(max(a, b)))
+    lo = max(0, min(lo, axis_max))
+    hi = max(0, min(hi, axis_max))
+    if hi <= lo:
+        hi = min(axis_max, lo + 1)
+    return lo, hi
+
+
+def _moving_average(values: list[int], radius: int) -> list[float]:
+    if radius <= 0 or not values:
+        return [float(v) for v in values]
+    out: list[float] = []
+    n = len(values)
+    for idx in range(n):
+        lo = max(0, idx - radius)
+        hi = min(n, idx + radius + 1)
+        window = values[lo:hi]
+        out.append(float(sum(window)) / float(len(window)))
+    return out
+
+
+def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | None:
+    """Snap model ``box_2d`` to nearest visible text band using a local projection profile."""
+    parsed = _parse_box_2d(box_2d)
+    if parsed is None:
+        return None
+    ymin, xmin, ymax, xmax = parsed
+    width, height = page_image.size
+    if width <= 0 or height <= 0:
+        return None
+
+    left, right = _normalize_box_axis_pair(
+        xmin / float(BOX_2D_NORMALIZED_MAX) * width,
+        xmax / float(BOX_2D_NORMALIZED_MAX) * width,
+        width,
+    )
+    top, bottom = _normalize_box_axis_pair(
+        ymin / float(BOX_2D_NORMALIZED_MAX) * height,
+        ymax / float(BOX_2D_NORMALIZED_MAX) * height,
+        height,
+    )
+    if right <= left or bottom <= top:
+        return None
+
+    box_h = max(1, bottom - top)
+    anchor_y = (top + bottom) // 2
+    search_margin = max(SNAP_SEARCH_MARGIN_MIN_PX, box_h // SNAP_SEARCH_MARGIN_BOX_H_DIVISOR)
+    search_top = max(0, anchor_y - search_margin)
+    search_bottom = min(height, anchor_y + search_margin)
+    if search_bottom <= search_top:
+        return None
+
+    # Evaluate darkness only in the model x-span to avoid neighboring columns.
+    region = page_image.crop((left, search_top, right, search_bottom)).convert('L')
+    region_w, region_h = region.size
+    if region_w <= 0 or region_h <= 0:
+        return None
+
+    pixels = list(region.getdata())
+    row_counts: list[int] = [0] * region_h
+    for row in range(region_h):
+        base = row * region_w
+        cnt = 0
+        for col in range(region_w):
+            if pixels[base + col] < SNAP_DARK_PIXEL_THRESHOLD:
+                cnt += 1
+        row_counts[row] = cnt
+
+    smoothed = _moving_average(row_counts, SNAP_SMOOTH_RADIUS)
+    min_dark_pixels = max(SNAP_MIN_DARK_PIXELS, region_w // SNAP_MIN_DARK_PIXELS_WINDOW_DIVISOR)
+
+    peak_idx = -1
+    peak_score = -1.0
+    for idx, score in enumerate(smoothed):
+        if score < float(min_dark_pixels):
+            continue
+        dist = abs((search_top + idx) - anchor_y)
+        weighted = score - (0.02 * float(dist))
+        if weighted > peak_score:
+            peak_score = weighted
+            peak_idx = idx
+    if peak_idx < 0:
+        return None
+
+    peak_value = smoothed[peak_idx]
+    valley_threshold = max(1.0, peak_value * SNAP_VALLEY_RATIO)
+
+    band_top = peak_idx
+    while band_top > 0 and smoothed[band_top - 1] >= valley_threshold:
+        band_top -= 1
+    band_bottom = peak_idx
+    while band_bottom + 1 < region_h and smoothed[band_bottom + 1] >= valley_threshold:
+        band_bottom += 1
+
+    snapped_top_px = search_top + band_top
+    snapped_bottom_px = search_top + band_bottom + 1
+    if snapped_bottom_px - snapped_top_px < SNAP_MIN_BAND_HEIGHT_PX:
+        pad = SNAP_MIN_BAND_HEIGHT_PX - (snapped_bottom_px - snapped_top_px)
+        snapped_top_px = max(0, snapped_top_px - (pad // 2))
+        snapped_bottom_px = min(height, snapped_bottom_px + (pad - (pad // 2)))
+    if snapped_bottom_px <= snapped_top_px:
+        return None
+
+    nymin, nymax = _normalize_box_axis_pair(
+        (snapped_top_px / float(height)) * BOX_2D_NORMALIZED_MAX,
+        (snapped_bottom_px / float(height)) * BOX_2D_NORMALIZED_MAX,
+        BOX_2D_NORMALIZED_MAX,
+    )
+    nxmin, nxmax = _normalize_box_axis_pair(xmin, xmax, BOX_2D_NORMALIZED_MAX)
+    return [nymin, nxmin, nymax, nxmax]
 
 
 def rstrip_line_text(value: object) -> object:

@@ -16,6 +16,7 @@ from jsonargparse import ArgumentParser as JsonArgParser
 from litellm import completion
 from pypdf import PdfReader
 
+from chunk_lines_model import load_page_images, snap_box_2d_to_ink
 from chunk_pdf_generator import ChunkPdfGenerator
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -369,6 +370,27 @@ def build_full_transcription_payload(
     }
 
 
+def snap_line_boxes_to_ink(chunk_pdf_path: Path, lines: list[dict]) -> str | None:
+    """Replace each line's ``box_2d`` with snap-to-ink bounds when detection succeeds."""
+    try:
+        page_images = load_page_images(chunk_pdf_path)
+    except Exception as exc:
+        return f'Could not rasterize pages for snap-to-ink: {exc}'
+
+    for line in lines:
+        page_number = line.get('page_number')
+        box_2d = line.get('box_2d')
+        if not isinstance(page_number, int) or page_number < 1:
+            continue
+        if page_number > len(page_images):
+            continue
+        snapped = snap_box_2d_to_ink(page_images[page_number - 1], box_2d)
+        if snapped is None:
+            continue
+        line['box_2d'] = snapped
+    return None
+
+
 def is_notes_min_length_validation_error(exc: jsonschema.ValidationError) -> bool:
     validator_is_min_length = exc.validator == 'minLength'
     validator_value_is_one = exc.validator_value == 1
@@ -612,6 +634,10 @@ def transcribe_single_chunk(
             file=sys.stderr,
         )
         return 1
+
+    snap_err = snap_line_boxes_to_ink(chunk_pdf_path, llm_payload['lines'])
+    if snap_err is not None:
+        print(f'Warning: {snap_err}', file=sys.stderr)
 
     payload = build_full_transcription_payload(llm_payload, transcribe_config)
 

@@ -1,0 +1,57 @@
+{
+  "lines": [
+    {
+      "page_number": 1,
+      "text": "== Page 4",
+      "box_2d": [
+        48,
+        80,
+        75,
+        190
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 1,
+      "text": "This is part A, page 4 content for review-PDF generation testing.",
+      "box_2d": [
+        95,
+        80,
+        110,
+        615
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 2,
+      "text": "// Page 5",
+      "box_2d": [
+        48,
+        80,
+        75,
+        190
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 2,
+      "text": "This is part A, page 5 content for review-PDF generation testing.",
+      "box_2d": [
+        95,
+        80,
+        110,
+        615
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    }
+  ],
+  "confidence_score": 0.99,
+  "confidence_label": "high",
+  "notes": "",
+  "model": "gemini/gemini-3.1-pro-preview",
+  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
+}

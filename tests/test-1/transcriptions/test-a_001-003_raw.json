@@ -1,0 +1,93 @@
+{
+  "lines": [
+    {
+      "page_number": 1,
+      "text": "== Test Work - Part A",
+      "box_2d": [
+        54,
+        292,
+        77,
+        706
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 1,
+      "text": "=== Page 1",
+      "box_2d": [
+        117,
+        80,
+        133,
+        199
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 1,
+      "text": "This is part A, page 1 content for review-PDF generation testing.",
+      "box_2d": [
+        159,
+        80,
+        168,
+        615
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 2,
+      "text": "== Page 2",
+      "box_2d": [
+        55,
+        80,
+        71,
+        199
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 2,
+      "text": "This is part A, page 2 content for review-PDF generation testing.",
+      "box_2d": [
+        97,
+        80,
+        106,
+        615
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 3,
+      "text": "== Page 3",
+      "box_2d": [
+        53,
+        80,
+        71,
+        199
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    },
+    {
+      "page_number": 3,
+      "text": "This is part A, page 3 content for review-PDF generation testing.",
+      "box_2d": [
+        97,
+        80,
+        106,
+        615
+      ],
+      "confidence_label": "high",
+      "notes": ""
+    }
+  ],
+  "confidence_score": 0.99,
+  "confidence_label": "high",
+  "notes": "",
+  "model": "gemini/gemini-3.1-pro-preview",
+  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
+}

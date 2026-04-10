@@ -639,6 +639,8 @@ def transcribe_single_chunk(
         return 1
 
     # Run snap-to-ink after schema validation so we only post-process well-formed data.
+    # This step corrects the VLM's natural "coordinate drift" by adjusting the raw
+    # `box_2d` coordinates to perfectly wrap the physical ink printed on the page.
     snap_err = snap_line_boxes_to_ink(chunk_pdf_path, llm_payload['lines'])
     if snap_err is not None:
         print(f'Warning: {snap_err}', file=sys.stderr)

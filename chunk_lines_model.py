@@ -37,32 +37,36 @@ CROP_PAD_X_MIN_PX = 1
 CROP_PAD_X_BOX_W_DIVISOR = 50
 CROP_PAD_X_BOX_W_OFFSET = 1
 
-# Why this snap-to-ink layer exists (and why we do not rely on model ``box_2d`` alone):
+# Why this "snap-to-ink" layer exists (and why we do not rely on model `box_2d` alone):
 #
-# In practice, some model outputs contain a valid transcription line for nearly every
-# visual line on the page, but the returned ``box_2d`` sequence is not always a true
-# 1-to-1 map of those lines. We have observed pages where:
-# - the transcription includes more lines than there are distinct visible boxes,
-# - adjacent lines appear merged into one box, or some line boxes are skipped, and
-# - index-based assumptions (line N -> box N) drift lower and lower down the page.
+# In practice, VLMs (Vision Language Models) do not mathematically calculate bounding boxes
+# based on image pixels. Instead, they estimate coordinates based on the "patches" of the
+# image they process as tokens.
+#
+# This leads to several common spatial desync issues, especially on dense historical pages:
+# 1. The transcription includes more (or fewer) lines of text than there are distinct
+#    visible bounding boxes.
+# 2. Adjacent lines are merged into a single box, or some line boxes are skipped entirely.
+# 3. "Coordinate Drift": As the model moves down the page, small estimation errors compound,
+#    causing the returned `box_2d` coordinates to drift significantly below the actual text.
 #
 # That drift can become severe enough that a mid-page line highlights near unrelated
-# content (for example page numbers/footer regions). The core issue is that ``box_2d``
-# is an approximate layout signal from a separate rendering/analysis path; it is useful
-# as a coarse anchor, but not always accurate enough for deterministic reviewer UX.
+# content. Therefore, the `box_2d` is an approximate layout signal; it is useful
+# as a coarse anchor, but not accurate enough for a deterministic human-in-the-loop UI.
 #
-# The projection-profile snap step addresses this by:
-# 1) using model ``box_2d`` only to identify a local search neighborhood,
-# 2) detecting where dark pixels (actual printed ink) are concentrated in that area, and
-# 3) snapping vertical bounds to the nearest real text band.
+# The projection-profile "snap" step addresses this by:
+# 1. Using the model's `box_2d` *only* to identify a local vertical search neighborhood.
+# 2. Detecting where dark pixels (actual printed ink) are concentrated in that area.
+# 3. "Snapping" the vertical bounds to the nearest real text band.
 #
 # We intentionally keep this Pillow-based and local-windowed:
-# - Pillow keeps dependencies light for this toolchain,
-# - local search avoids accidentally snapping to nearby paragraphs/columns, and
-# - if confidence is weak, callers can keep the original box rather than forcing a bad snap.
-# 
-# In early development mode, successful snap output is written back into ``box_2d`` so
-# reviewer/highlight code can stay simple and fast at runtime.
+# - Pillow keeps dependencies light for this toolchain.
+# - Local search avoids accidentally snapping to nearby paragraphs or adjacent columns.
+# - If the projection profile confidence is weak, callers can fall back to the original box.
+#
+# During the transcription phase (`transcribe-chunk-pdf.py`), this successful snap output
+# is written back into the JSON payload's `box_2d` so the reviewer UI code remains simple,
+# fast, and perfectly aligned at runtime.
 # Snap-to-ink tuning for line-level projection profiling.
 SNAP_DARK_PIXEL_THRESHOLD = 175
 SNAP_SMOOTH_RADIUS = 2

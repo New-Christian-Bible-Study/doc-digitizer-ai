@@ -2,7 +2,7 @@
 """
 Export full-page rasters with line box outlines (same geometry as review-chunk-lines crops).
 
-  python tests/chunk-lines-boxes-export.py --working-dir <dir>
+  python tests/chunk-lines-boxes-export.py --working-dir <dir>   # from prompt-based/
 
 Uses ``--working-dir`` like transcribe-chunk-pdf.py / review-chunk-lines.py. Without
 ``--raw-json``, pick a ``transcriptions/*_raw.json`` interactively (arrow keys). Use
@@ -16,9 +16,9 @@ import io
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+_STRATEGY_ROOT = Path(__file__).resolve().parent.parent
+if str(_STRATEGY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_STRATEGY_ROOT))
 
 import img2pdf
 import questionary

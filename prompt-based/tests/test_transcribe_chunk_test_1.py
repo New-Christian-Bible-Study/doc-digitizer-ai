@@ -5,15 +5,15 @@ import pytest
 from pypdf import PdfReader, PdfWriter
 
 from transcribe_integration_helpers import (
-    REPO_PROMPT_PATH,
+    STRATEGY_PROMPT_PATH,
     assert_common_ai_log_fields,
     run_live_transcription,
     skip_if_missing_api_key,
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-WORKING_DIR = PROJECT_ROOT / 'tests' / 'test-1'
+STRATEGY_ROOT = Path(__file__).resolve().parents[1]
+WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
 TEST_1_CHUNK_PDF_FILENAME = 'test-a_001-003.pdf'
 TEST_1_OUTPUT_PATH = WORKING_DIR / 'transcriptions' / 'test-a_001-003_raw.json'
 TEST_1_AI_LOG_PATH = WORKING_DIR / 'transcriptions' / 'test-a_001-003-ai-log.md'
@@ -44,7 +44,9 @@ def test_live_integration_test_1_transcribes_and_logs():
     if TEST_1_AI_LOG_PATH.exists():
         TEST_1_AI_LOG_PATH.unlink()
 
-    result = run_live_transcription(WORKING_DIR, TEST_1_CHUNK_PDF_FILENAME, REPO_PROMPT_PATH)
+    result = run_live_transcription(
+        WORKING_DIR, TEST_1_CHUNK_PDF_FILENAME, STRATEGY_PROMPT_PATH
+    )
 
     assert result.returncode == 0, result.stderr
     assert TEST_1_OUTPUT_PATH.exists()

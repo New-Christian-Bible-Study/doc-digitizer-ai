@@ -3,11 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from transcribe_integration_helpers import REPO_PROMPT_PATH, run_live_transcription, skip_if_missing_api_key
+from transcribe_integration_helpers import (
+    STRATEGY_PROMPT_PATH,
+    run_live_transcription,
+    skip_if_missing_api_key,
+)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-WORKING_DIR_TEST_2 = PROJECT_ROOT / 'tests' / 'test-2'
+STRATEGY_ROOT = Path(__file__).resolve().parents[1]
+WORKING_DIR_TEST_2 = STRATEGY_ROOT / 'tests' / 'test-2'
 TEST_2_CHUNK_PDF_FILENAME = 'test-2.pdf'
 TEST_2_OUTPUT_PATH = WORKING_DIR_TEST_2 / 'transcriptions' / 'test-2_raw.json'
 
@@ -22,7 +26,7 @@ def test_live_integration_test_2_produces_raw_json_with_lines():
     result = run_live_transcription(
         WORKING_DIR_TEST_2,
         TEST_2_CHUNK_PDF_FILENAME,
-        REPO_PROMPT_PATH,
+        STRATEGY_PROMPT_PATH,
     )
 
     assert result.returncode == 0, result.stderr

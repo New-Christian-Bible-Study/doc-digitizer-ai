@@ -40,10 +40,3 @@ Thumbs.db
 
 # Rendered PDFs next to AsciiDoc in transcriptions (build-transcribed-chunk-pdfs.py)
 **/transcriptions/**/*.pdf
-
-# Generated chunk PDFs and local state
-tests/test-1/chunk-pdfs/*
-!tests/test-1/chunk-pdfs/.gitkeep
-tests/test-1/.chunk-state.json
-tests/test-1/transcriptions/*
-!tests/test-1/transcriptions/.gitkeep

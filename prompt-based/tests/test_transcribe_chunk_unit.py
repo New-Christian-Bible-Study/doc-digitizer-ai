@@ -9,10 +9,10 @@ import jsonschema
 import pytest
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-WORKING_DIR = PROJECT_ROOT / 'tests' / 'test-1'
-SCRIPT_PATH = PROJECT_ROOT / 'transcribe-chunk-pdf.py'
-PROMPT_PATH = PROJECT_ROOT / 'prompt.md'
+STRATEGY_ROOT = Path(__file__).resolve().parents[1]
+WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
+SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk-pdf.py'
+PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'
 
 
 def load_transcribe_module():

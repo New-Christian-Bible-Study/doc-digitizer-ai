@@ -13,7 +13,7 @@ pytest -q
 Run the live transcription integration test subset:
 
 ```bash
-pytest -q -k transcribe_chunk_pdf
+pytest -q -k transcribe_chunk
 ```
 
 ## Regenerate fixture PDFs
@@ -21,8 +21,8 @@ pytest -q -k transcribe_chunk_pdf
 If you edit fixture AsciiDoc files, regenerate fixture PDFs with:
 
 ```bash
-asciidoctor-pdf tests/test-1/test-a.adoc -o tests/test-1/source-pdfs/test-a.pdf
-asciidoctor-pdf tests/test-1/test-b.adoc -o tests/test-1/source-pdfs/test-b.pdf
+asciidoctor-pdf prompt-based/tests/test-1/test-a.adoc -o prompt-based/tests/test-1/source-pdfs/test-a.pdf
+asciidoctor-pdf prompt-based/tests/test-1/test-b.adoc -o prompt-based/tests/test-1/source-pdfs/test-b.pdf
 ```
 
 ## Transcription config reference
@@ -39,4 +39,4 @@ Example `transcribe.config.json`:
 }
 ```
 
-The full default `sys_instructions` text is in the repository root `transcribe.config.json`.
+The full default `sys_instructions` text is in [`prompt-based/transcribe.config.json`](../../prompt-based/transcribe.config.json) (fallback when the working directory has no `transcribe.config.json`).

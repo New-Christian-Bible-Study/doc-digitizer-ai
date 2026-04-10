@@ -34,12 +34,12 @@ Expected behavior:
 
 ## Files to add/update
 
-- New CLI script: `[doc-digitizer-ai/transcribe-chunk-pdf.py](doc-digitizer-ai/transcribe-chunk-pdf.py)`
-- Schema (reuse/adapt): `[doc-digitizer-ai/transcription.schema.json](doc-digitizer-ai/transcription.schema.json)`
-- Tests (true integration): `[doc-digitizer-ai/tests/test_transcribe_chunk_pdf.py](doc-digitizer-ai/tests/test_transcribe_chunk_pdf.py)`
-- Prompt: `[doc-digitizer-ai/prompt.md](doc-digitizer-ai/prompt.md)`
-- Dependency updates: `[doc-digitizer-ai/requirements.txt](doc-digitizer-ai/requirements.txt)`
-- Usage docs: `[doc-digitizer-ai/README.md](doc-digitizer-ai/README.md)`
+- New CLI script: `[doc-digitizer-ai/prompt-based/transcribe-chunk-pdf.py](../../prompt-based/transcribe-chunk-pdf.py)`
+- Schema (reuse/adapt): `[doc-digitizer-ai/prompt-based/transcription.schema.json](../../prompt-based/transcription.schema.json)`
+- Tests (true integration): `[doc-digitizer-ai/prompt-based/tests/](../../prompt-based/tests/)` (e.g. `test_transcribe_chunk_*.py`)
+- Prompt: `[doc-digitizer-ai/prompt-based/prompt.md](../../prompt-based/prompt.md)`
+- Dependency updates: `[doc-digitizer-ai/requirements.txt](../../requirements.txt)`
+- Usage docs: `[doc-digitizer-ai/prompt-based/README.md](../../prompt-based/README.md)`
 
 ## CLI design
 
@@ -75,7 +75,7 @@ Create true integration tests that pass CLI args and call Gemini through LiteLLM
 - missing `GEMINI_API_KEY` returns clear error
 - invalid `chunk-pdfs` filename/path handling
 - if `GEMINI_API_KEY` is not set in CI/local environment, mark live integration tests as skipped with clear reason
-- use explicit invocation in docs/verification: `pytest -q tests/test_transcribe_chunk_pdf.py`
+- use explicit invocation in docs/verification: `pytest -q prompt-based/tests/test_transcribe_chunk_unit.py` (and integration modules as needed)
 
 ## Design decision on split
 

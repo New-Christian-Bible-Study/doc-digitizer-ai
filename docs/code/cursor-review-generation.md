@@ -38,16 +38,16 @@ Create a new command-line Python script that:
 
 ## Files to add/update
 
-- Main script: `[doc-digitizer-ai/generate-chunk-pdf.py](doc-digitizer-ai/generate-chunk-pdf.py)`
-- Core module: `[doc-digitizer-ai/chunk_pdf_generator.py](doc-digitizer-ai/chunk_pdf_generator.py)` (class used by CLI and tests)
-- Test module: `[doc-digitizer-ai/tests/test_generate_chunk_pdf.py](doc-digitizer-ai/tests/test_generate_chunk_pdf.py)`
-- Dependency note: `[doc-digitizer-ai/requirements.txt](doc-digitizer-ai/requirements.txt)` (add `pypdf` if missing)
-- Usage doc: `[doc-digitizer-ai/README.md](doc-digitizer-ai/README.md)`
+- Main script: `[doc-digitizer-ai/prompt-based/generate-chunk-pdf.py](../../prompt-based/generate-chunk-pdf.py)`
+- Core module: `[doc-digitizer-ai/prompt-based/chunk_pdf_generator.py](../../prompt-based/chunk_pdf_generator.py)` (class used by CLI and tests)
+- Test module: `[doc-digitizer-ai/prompt-based/tests/test_generate_chunk_pdf.py](../../prompt-based/tests/test_generate_chunk_pdf.py)`
+- Dependency note: `[doc-digitizer-ai/requirements.txt](../../requirements.txt)` (add `pypdf` if missing)
+- Usage doc: `[doc-digitizer-ai/prompt-based/README.md](../../prompt-based/README.md)`
 - Fixture updates:
-  - `[doc-digitizer-ai/tests/test-1/test-a.adoc](doc-digitizer-ai/tests/test-1/test-a.adoc)`
-  - `[doc-digitizer-ai/tests/test-1/test-b.adoc](doc-digitizer-ai/tests/test-1/test-b.adoc)`
-  - `[doc-digitizer-ai/tests/test-1/source-pdfs/](doc-digitizer-ai/tests/test-1/source-pdfs/)`
-  - `[doc-digitizer-ai/tests/test-1/chunk-pdfs/](doc-digitizer-ai/tests/test-1/chunk-pdfs/)`
+  - `[doc-digitizer-ai/prompt-based/tests/test-1/test-a.adoc](../../prompt-based/tests/test-1/test-a.adoc)`
+  - `[doc-digitizer-ai/prompt-based/tests/test-1/test-b.adoc](../../prompt-based/tests/test-1/test-b.adoc)`
+  - `[doc-digitizer-ai/prompt-based/tests/test-1/source-pdfs/](../../prompt-based/tests/test-1/source-pdfs/)`
+  - `[doc-digitizer-ai/prompt-based/tests/test-1/chunk-pdfs/](../../prompt-based/tests/test-1/chunk-pdfs/)`
 
 ## Behavior details
 
@@ -93,12 +93,12 @@ Create a new command-line Python script that:
 
 ## Verification steps
 
-- Prepare fixture content in `tests/test-1/`:
+- Prepare fixture content in `prompt-based/tests/test-1/`:
   - use `test-a.adoc` and `test-b.adoc` as the AsciiDoc sources
   - update titles to represent different parts of the same work
   - add explicit page breaks so each AsciiDoc renders to 5 PDF pages
-  - generate PDFs via `asciidoctor-pdf` and place them in `tests/test-1/source-pdfs/`
-- Manual run from `tests/test-1/` working directory:
+  - generate PDFs via `asciidoctor-pdf` and place them in `prompt-based/tests/test-1/source-pdfs/`
+- Manual run with `--working-dir prompt-based/tests/test-1` (or `cd` there and pass `--working-dir .`):
   - choose source filename from `source-pdfs/`
   - create `001-005`
   - rerun and confirm start defaults to `006`

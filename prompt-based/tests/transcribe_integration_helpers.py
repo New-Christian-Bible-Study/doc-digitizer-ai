@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = PROJECT_ROOT / 'transcribe-chunk-pdf.py'
+STRATEGY_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk-pdf.py'
 # Same file the transcribe script uses when the working dir has no *prompt*.md.
-REPO_PROMPT_PATH = PROJECT_ROOT / 'prompt.md'
+STRATEGY_PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'
 
 
 def skip_if_missing_api_key():
@@ -47,8 +47,8 @@ def assert_common_ai_log_fields(ai_log_text: str, chunk_pdf_filename: str):
     assert '- Configuration: `' not in ai_log_text
     assert '## Transcribe config used' in ai_log_text
     assert '"model": "gemini/gemini-3.1-pro-preview"' in ai_log_text
-    assert '"temperature": 0.0' in ai_log_text
-    assert '"reasoning_effort": "high"' in ai_log_text
+    assert '"temperature": 1.0' in ai_log_text
+    assert '"reasoning_effort": "medium"' in ai_log_text
     assert '"media_resolution": "high"' in ai_log_text
     assert '"sys_instructions":' in ai_log_text
     assert '- Confidence score: `' in ai_log_text

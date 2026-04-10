@@ -37,6 +37,32 @@ CROP_PAD_X_MIN_PX = 1
 CROP_PAD_X_BOX_W_DIVISOR = 50
 CROP_PAD_X_BOX_W_OFFSET = 1
 
+# Why this snap-to-ink layer exists (and why we do not rely on model ``box_2d`` alone):
+#
+# In practice, some model outputs contain a valid transcription line for nearly every
+# visual line on the page, but the returned ``box_2d`` sequence is not always a true
+# 1-to-1 map of those lines. We have observed pages where:
+# - the transcription includes more lines than there are distinct visible boxes,
+# - adjacent lines appear merged into one box, or some line boxes are skipped, and
+# - index-based assumptions (line N -> box N) drift lower and lower down the page.
+#
+# That drift can become severe enough that a mid-page line highlights near unrelated
+# content (for example page numbers/footer regions). The core issue is that ``box_2d``
+# is an approximate layout signal from a separate rendering/analysis path; it is useful
+# as a coarse anchor, but not always accurate enough for deterministic reviewer UX.
+#
+# The projection-profile snap step addresses this by:
+# 1) using model ``box_2d`` only to identify a local search neighborhood,
+# 2) detecting where dark pixels (actual printed ink) are concentrated in that area, and
+# 3) snapping vertical bounds to the nearest real text band.
+#
+# We intentionally keep this Pillow-based and local-windowed:
+# - Pillow keeps dependencies light for this toolchain,
+# - local search avoids accidentally snapping to nearby paragraphs/columns, and
+# - if confidence is weak, callers can keep the original box rather than forcing a bad snap.
+# 
+# In early development mode, successful snap output is written back into ``box_2d`` so
+# reviewer/highlight code can stay simple and fast at runtime.
 # Snap-to-ink tuning for line-level projection profiling.
 SNAP_DARK_PIXEL_THRESHOLD = 175
 SNAP_SMOOTH_RADIUS = 2
@@ -216,6 +242,8 @@ def clamp_box_2d_to_pixels(
 
 
 def _parse_box_2d(box_2d: object) -> tuple[float, float, float, float] | None:
+    # Keep this permissive (float parse) because upstream model output can drift
+    # between ints/floats/strings depending on provider behavior.
     if not isinstance(box_2d, list) or len(box_2d) != 4:
         return None
     try:
@@ -276,6 +304,8 @@ def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | N
 
     box_h = max(1, bottom - top)
     anchor_y = (top + bottom) // 2
+    # Search locally around the model anchor. Keeping this local avoids snapping to
+    # neighboring paragraphs when the page has dense text.
     search_margin = max(SNAP_SEARCH_MARGIN_MIN_PX, box_h // SNAP_SEARCH_MARGIN_BOX_H_DIVISOR)
     search_top = max(0, anchor_y - search_margin)
     search_bottom = min(height, anchor_y + search_margin)
@@ -298,6 +328,7 @@ def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | N
                 cnt += 1
         row_counts[row] = cnt
 
+    # Smooth out per-row noise (serifs/scan speckles) before finding peaks.
     smoothed = _moving_average(row_counts, SNAP_SMOOTH_RADIUS)
     min_dark_pixels = max(SNAP_MIN_DARK_PIXELS, region_w // SNAP_MIN_DARK_PIXELS_WINDOW_DIVISOR)
 
@@ -306,6 +337,7 @@ def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | N
     for idx, score in enumerate(smoothed):
         if score < float(min_dark_pixels):
             continue
+        # Prefer bands near the original anchor when multiple rows are similarly dark.
         dist = abs((search_top + idx) - anchor_y)
         weighted = score - (0.02 * float(dist))
         if weighted > peak_score:
@@ -315,6 +347,7 @@ def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | N
         return None
 
     peak_value = smoothed[peak_idx]
+    # Use a relative valley threshold so band growth adapts across faint/dark scans.
     valley_threshold = max(1.0, peak_value * SNAP_VALLEY_RATIO)
 
     band_top = peak_idx

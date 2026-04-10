@@ -373,6 +373,7 @@ def build_full_transcription_payload(
 def snap_line_boxes_to_ink(chunk_pdf_path: Path, lines: list[dict]) -> str | None:
     """Replace each line's ``box_2d`` with snap-to-ink bounds when detection succeeds."""
     try:
+        # Raster once per chunk so --all mode does not re-render per line.
         page_images = load_page_images(chunk_pdf_path)
     except Exception as exc:
         return f'Could not rasterize pages for snap-to-ink: {exc}'
@@ -386,7 +387,9 @@ def snap_line_boxes_to_ink(chunk_pdf_path: Path, lines: list[dict]) -> str | Non
             continue
         snapped = snap_box_2d_to_ink(page_images[page_number - 1], box_2d)
         if snapped is None:
+            # Keep original model coordinates when snap confidence is weak.
             continue
+        # In early-dev mode, ``box_2d`` is authoritative and stores snapped output.
         line['box_2d'] = snapped
     return None
 
@@ -635,6 +638,7 @@ def transcribe_single_chunk(
         )
         return 1
 
+    # Run snap-to-ink after schema validation so we only post-process well-formed data.
     snap_err = snap_line_boxes_to_ink(chunk_pdf_path, llm_payload['lines'])
     if snap_err is not None:
         print(f'Warning: {snap_err}', file=sys.stderr)

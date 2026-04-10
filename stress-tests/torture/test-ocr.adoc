@@ -1,0 +1,67 @@
+= OCR Stress Test Page
+:doctype: article
+
+== 1. Font Size Stress Test
+[.tiny]
+This is 4pt text. It is designed to test the resolution limits of the OCR engine and the model's ability to distinguish 'e' from 'o' at microscopic scales.
+
+[.fine-print]
+This is 6pt text. This is common in legal disclaimers and should be readable by high-quality models, but often fails on standard Tesseract-style engines.
+
+== 2. Contrast & Luminance Test
+[.ghost]
+This text is rendered in #E0E0E0 (Light Grey). It tests the engine's thresholding capabilities and sensitivity to low-contrast edges.
+
+[.phantom]
+This text is rendered in #F2F2F2. To the human eye on a standard monitor, it is nearly invisible. This is a "hard-fail" test for most vision models.
+
+== 3. Spatial & Layout Stress
+[.cramped]
+This paragraph uses a line height of 0.7.
+By reducing the vertical buffer between lines,
+we test if the OCR can maintain baseline 
+integrity without merging characters from 
+the line above or below.
+
+== 4. Background Noise Simulation
+// In PDF, section 4 uses generated PNGs (see gen-noise-stress-images.py). HTML shows the transcript for ground-truth.txt.
+
+=== 4.1 Dark uniform panel
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/uniform-dark.png[OCR stress uniform mid-grey panel,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+Uniform mid-grey panel (~#A8A8A8). OCR should read this line despite a flat non-white backing similar to tinted copier paper.
+endif::[]
+
+=== 4.2 Subtle gradient
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/gradient-panel.png[OCR stress vertical gradient panel,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+Subtle vertical gradient from ~#909090 to ~#C8C8C8. Tests thresholding when background luminance drifts smoothly across the line.
+endif::[]
+
+=== 4.3 Uneven shading
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/uneven-shading.png[OCR stress low-frequency shading,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+Low-frequency shading and vignette mimic uneven platen lighting or mild drum wear; strokes should still decode cleanly.
+endif::[]
+
+=== 4.4 Printed noise and speckle
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/speckle-print.png[OCR stress speckle and halftone-like noise,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+High-frequency speckle and salt-and-pepper noise mimic print soot, dust, and coarse halftone; text must separate from background grain.
+endif::[]

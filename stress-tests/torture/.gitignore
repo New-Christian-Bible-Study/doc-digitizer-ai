@@ -1,0 +1,7 @@
+# Generated outputs (keep test-ocr.pdf, ground-truth.txt tracked)
+noise-assets/
+temp.html
+*.pdf
+!test-ocr.pdf
+*.txt
+!ground-truth.txt

@@ -1,0 +1,30 @@
+extends: default
+page:
+  layout: portrait
+  margin: [0.5in, 0.5in, 0.5in, 0.5in]
+heading:
+  h1_font_size: floor($base_font_size * 2.6 * 0.7)
+  h2_font_size: floor($base_font_size * 2.15 * 0.7)
+  h3_font_size: round($base_font_size * 1.7 * 0.7)
+  h4_font_size: round($base_font_size_large * 0.7)
+  h5_font_size: round($base_font_size * 0.7)
+  h6_font_size: round($base_font_size_small * 0.7)
+role:
+  # Extreme Small Font
+  tiny:
+    font_size: 4
+  # Small but slightly more realistic fine print
+  fine-print:
+    font_size: 6
+  # Low Contrast (Light Grey)
+  ghost:
+    font_color: #E0E0E0
+  # Extreme Low Contrast (Nearly invisible to the eye)
+  phantom:
+    font_color: #F2F2F2
+  # Tight Spacing (Overlapping potential)
+  cramped:
+    line_height: 0.7
+  # Redacted-style or dense background
+  highlight:
+    background_color: #EEEEEE

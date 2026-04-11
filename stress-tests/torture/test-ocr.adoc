@@ -1,19 +1,32 @@
 = OCR Stress Test Page
 :doctype: article
+:accent-stress-line: Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich straße, łódź, ångström; São José.
 
 == 1. Font Size Stress Test
 [.tiny]
 This is 4pt text. It is designed to test the resolution limits of the OCR engine and the model's ability to distinguish 'e' from 'o' at microscopic scales.
 
+[.tiny]
+{accent-stress-line}
+
 [.fine-print]
 This is 6pt text. This is common in legal disclaimers and should be readable by high-quality models, but often fails on standard Tesseract-style engines.
+
+[.fine-print]
+{accent-stress-line}
 
 == 2. Contrast & Luminance Test
 [.ghost]
 This text is rendered in #E0E0E0 (Light Grey). It tests the engine's thresholding capabilities and sensitivity to low-contrast edges.
 
+[.ghost]
+{accent-stress-line}
+
 [.phantom]
 This text is rendered in #F2F2F2. To the human eye on a standard monitor, it is nearly invisible. This is a "hard-fail" test for most vision models.
+
+[.phantom]
+{accent-stress-line}
 
 == 3. Spatial & Layout Stress
 [.cramped]
@@ -22,6 +35,9 @@ By reducing the vertical buffer between lines,
 we test if the OCR can maintain baseline 
 integrity without merging characters from 
 the line above or below.
+
+[.cramped]
+{accent-stress-line}
 
 == 4. Background Noise Simulation
 // In PDF, section 4 uses generated PNGs (see gen-noise-stress-images.py). HTML shows the transcript for ground-truth.txt.
@@ -34,6 +50,8 @@ endif::[]
 
 ifeval::["{backend}" != "pdf"]
 Uniform mid-grey panel (~#A8A8A8). OCR should read this line despite a flat non-white backing similar to tinted copier paper.
+
+{accent-stress-line}
 endif::[]
 
 === 4.2 Subtle gradient
@@ -44,6 +62,8 @@ endif::[]
 
 ifeval::["{backend}" != "pdf"]
 Subtle vertical gradient from ~#909090 to ~#C8C8C8. Tests thresholding when background luminance drifts smoothly across the line.
+
+{accent-stress-line}
 endif::[]
 
 === 4.3 Uneven shading
@@ -54,6 +74,8 @@ endif::[]
 
 ifeval::["{backend}" != "pdf"]
 Low-frequency shading and vignette mimic uneven platen lighting or mild drum wear; strokes should still decode cleanly.
+
+{accent-stress-line}
 endif::[]
 
 === 4.4 Printed noise and speckle
@@ -64,4 +86,6 @@ endif::[]
 
 ifeval::["{backend}" != "pdf"]
 High-frequency speckle and salt-and-pepper noise mimic print soot, dust, and coarse halftone; text must separate from background grain.
+
+{accent-stress-line}
 endif::[]

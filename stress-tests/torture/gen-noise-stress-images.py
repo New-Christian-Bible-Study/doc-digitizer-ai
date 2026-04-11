@@ -22,24 +22,34 @@ FONT_CANDIDATES = (
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'noise-assets')
 
+# Must match :accent-stress-line: in test-ocr.adoc byte-for-byte.
+ACCENT_STRESS_LINE = (
+    'Più però crème naïve résumé, piñata façade, pædiatric œuvre; '
+    'Zürich straße, łódź, ångström; São José.'
+)
+
 TEXT_UNIFORM = (
     'Uniform mid-grey panel (~#A8A8A8). OCR should read this line despite '
-    'a flat non-white backing similar to tinted copier paper.'
+    'a flat non-white backing similar to tinted copier paper. '
+    + ACCENT_STRESS_LINE
 )
 
 TEXT_GRADIENT = (
     'Subtle vertical gradient from ~#909090 to ~#C8C8C8. Tests thresholding '
-    'when background luminance drifts smoothly across the line.'
+    'when background luminance drifts smoothly across the line. '
+    + ACCENT_STRESS_LINE
 )
 
 TEXT_SHADING = (
     'Low-frequency shading and vignette mimic uneven platen lighting or mild '
-    'drum wear; strokes should still decode cleanly.'
+    'drum wear; strokes should still decode cleanly. '
+    + ACCENT_STRESS_LINE
 )
 
 TEXT_SPECKLE = (
     'High-frequency speckle and salt-and-pepper noise mimic print soot, dust, '
-    'and coarse halftone; text must separate from background grain.'
+    'and coarse halftone; text must separate from background grain. '
+    + ACCENT_STRESS_LINE
 )
 
 

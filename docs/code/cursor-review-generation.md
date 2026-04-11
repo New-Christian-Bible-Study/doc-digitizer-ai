@@ -38,9 +38,9 @@ Create a new command-line Python script that:
 
 ## Files to add/update
 
-- Main script: `[doc-digitizer-ai/prompt-based/generate-chunk-pdf.py](../../prompt-based/generate-chunk-pdf.py)`
-- Core module: `[doc-digitizer-ai/prompt-based/chunk_pdf_generator.py](../../prompt-based/chunk_pdf_generator.py)` (class used by CLI and tests)
-- Test module: `[doc-digitizer-ai/prompt-based/tests/test_generate_chunk_pdf.py](../../prompt-based/tests/test_generate_chunk_pdf.py)`
+- Main script: `[doc-digitizer-ai/prompt-based/generate-chunk.py](../../prompt-based/generate-chunk.py)`
+- Core module: `[doc-digitizer-ai/prompt-based/chunk_generator.py](../../prompt-based/chunk_generator.py)` (class used by CLI and tests)
+- Test module: `[doc-digitizer-ai/prompt-based/tests/test_generate_chunk.py](../../prompt-based/tests/test_generate_chunk.py)`
 - Dependency note: `[doc-digitizer-ai/requirements.txt](../../requirements.txt)` (add `pypdf` if missing)
 - Usage doc: `[doc-digitizer-ai/prompt-based/README.md](../../prompt-based/README.md)`
 - Fixture updates:
@@ -69,9 +69,9 @@ Create a new command-line Python script that:
   - file path: `.chunk-state.json` in current working directory
   - fields: last source filename, last end page, last generated output, updated timestamp
 - Core architecture:
-- `ChunkPdfGenerator` class encapsulates state loading/saving, filename defaults, validation, and PDF extraction
-- `generate-chunk-pdf.py` handles interactive prompts and delegates operations to `ChunkPdfGenerator`
-  - tests call `ChunkPdfGenerator` directly for non-UI behaviors
+- `ChunkGenerator` class encapsulates state loading/saving, filename defaults, validation, and PDF extraction
+- `generate-chunk.py` handles interactive prompts and delegates operations to `ChunkGenerator`
+  - tests call `ChunkGenerator` directly for non-UI behaviors
 
 ## Implementation approach
 
@@ -82,10 +82,10 @@ Create a new command-line Python script that:
   - Core class methods:
     - `load_state()`
     - `save_state(state)`
-    - `resolve_source_pdf(filename)`
-    - `build_default_filename(scan_pdf, start_page, end_page)`
-    - `extract_pages(scan_pdf, start_page, end_page, output_pdf)`
-    - `create_chunk_pdf(source_filename, start_page, end_page, output_filename)`
+    - `resolve_source(filename)`
+    - `build_default_filename(source, start_page, end_page)`
+    - `extract_pages(source, start_page, end_page, output)`
+    - `create_chunk(source_filename, start_page, end_page, output_filename)`
   - CLI-only helper:
     - `prompt_with_default(label, default)`
 - Follow PEP 8 and your style preferences (single quotes, no unnecessary type hints for no-return methods).

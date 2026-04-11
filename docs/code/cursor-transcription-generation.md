@@ -3,7 +3,7 @@ name: litellm-chunk-transcriber
 overview: Add a single integration-friendly CLI script that transcribes one chunk PDF via Gemini/LiteLLM using a provided prompt markdown file, validates JSON response against schema, and writes markdown output plus an AI run log to transcriptions/.
 todos:
   - id: add-transcribe-cli
-    content: Implement transcribe-chunk-pdf.py with LiteLLM Gemini call, schema validation, and markdown output write.
+    content: Implement transcribe-chunk.py with LiteLLM Gemini call, schema validation, and markdown output write.
     status: pending
   - id: add-transcribe-tests
     content: Add true integration tests that call Gemini via LiteLLM and validate end-to-end output.
@@ -34,7 +34,7 @@ Expected behavior:
 
 ## Files to add/update
 
-- New CLI script: `[doc-digitizer-ai/prompt-based/transcribe-chunk-pdf.py](../../prompt-based/transcribe-chunk-pdf.py)`
+- New CLI script: `[doc-digitizer-ai/prompt-based/transcribe-chunk.py](../../prompt-based/transcribe-chunk.py)`
 - Schema (reuse/adapt): `[doc-digitizer-ai/prompt-based/transcription.schema.json](../../prompt-based/transcription.schema.json)`
 - Tests (true integration): `[doc-digitizer-ai/prompt-based/tests/](../../prompt-based/tests/)` (e.g. `test_transcribe_chunk_*.py`)
 - Prompt: `[doc-digitizer-ai/prompt-based/prompt.md](../../prompt-based/prompt.md)`
@@ -45,7 +45,7 @@ Expected behavior:
 
 Primary arguments:
 
-- `--chunk-pdf <filename.pdf>` (required; filename only)
+- `--chunk <filename.pdf>` (required; filename only)
 - `--prompt-md <path/to/prompt.md>` (required)
 - `--working-dir <path>` (default `.`)
 - `--model <provider/model>` (default `gemini/gemini-2.5-flash`)

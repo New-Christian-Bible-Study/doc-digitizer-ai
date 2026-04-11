@@ -11,12 +11,12 @@ import pytest
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
 WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
-SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk-pdf.py'
+SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk.py'
 PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'
 
 
 def load_transcribe_module():
-    spec = spec_from_file_location('transcribe_chunk_pdf', SCRIPT_PATH)
+    spec = spec_from_file_location('transcribe_chunk', SCRIPT_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f'Unable to load module from {SCRIPT_PATH}')
     module = module_from_spec(spec)
@@ -64,7 +64,7 @@ def test_missing_api_key_returns_error():
         [
             '--working-dir',
             str(WORKING_DIR),
-            '--chunk-pdf',
+            '--chunk',
             'test-a_001-003.pdf',
             '--prompt-md',
             str(PROMPT_PATH),
@@ -82,7 +82,7 @@ def test_invalid_review_pdf_path_input_rejected():
         [
             '--working-dir',
             str(WORKING_DIR),
-            '--chunk-pdf',
+            '--chunk',
             'nested/path.pdf',
             '--prompt-md',
             str(PROMPT_PATH),
@@ -188,8 +188,8 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
     chunk_dir.mkdir(parents=True, exist_ok=True)
     prompt_path = working_dir / 'prompt.md'
     prompt_path.write_text('prompt body', encoding='utf-8')
-    chunk_pdf_path = chunk_dir / 'sample.pdf'
-    chunk_pdf_path.write_bytes(b'%PDF-1.4\n% fake pdf bytes')
+    chunk_path = chunk_dir / 'sample.pdf'
+    chunk_path.write_bytes(b'%PDF-1.4\n% fake pdf bytes')
     config_path = working_dir / module.TRANSCRIBE_CONFIG_FILENAME
     write_config(
         config_path,
@@ -199,7 +199,7 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
     )
 
     monkeypatch.setenv('GEMINI_API_KEY', 'test-key')
-    monkeypatch.setattr(module, 'get_pdf_page_count', lambda _: 1)
+    monkeypatch.setattr(module, 'get_page_count', lambda _: 1)
     monkeypatch.setattr(
         module,
         'completion',
@@ -231,7 +231,7 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
             str(SCRIPT_PATH),
             '--working-dir',
             str(working_dir),
-            '--chunk-pdf',
+            '--chunk',
             'sample.pdf',
             '--prompt-md',
             str(prompt_path),

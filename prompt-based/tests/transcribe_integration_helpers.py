@@ -7,7 +7,7 @@ import pytest
 
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk-pdf.py'
+SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk.py'
 # Same file the transcribe script uses when the working dir has no *prompt*.md.
 STRATEGY_PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'
 
@@ -19,7 +19,7 @@ def skip_if_missing_api_key():
 
 def run_live_transcription(
     working_dir: Path,
-    chunk_pdf_filename: str,
+    chunk_filename: str,
     prompt_md: Path,
 ) -> subprocess.CompletedProcess:
     command = [
@@ -27,8 +27,8 @@ def run_live_transcription(
         str(SCRIPT_PATH),
         '--working-dir',
         str(working_dir),
-        '--chunk-pdf',
-        chunk_pdf_filename,
+        '--chunk',
+        chunk_filename,
         '--prompt-md',
         str(prompt_md),
     ]
@@ -41,8 +41,8 @@ def run_live_transcription(
     )
 
 
-def assert_common_ai_log_fields(ai_log_text: str, chunk_pdf_filename: str):
-    assert f'Chunk PDF file: `{chunk_pdf_filename}`' in ai_log_text
+def assert_common_ai_log_fields(ai_log_text: str, chunk_filename: str):
+    assert f'Chunk file: `{chunk_filename}`' in ai_log_text
     assert '- Model: `' not in ai_log_text
     assert '- Configuration: `' not in ai_log_text
     assert '## Transcribe config used' in ai_log_text

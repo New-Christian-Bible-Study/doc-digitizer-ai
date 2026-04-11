@@ -12,7 +12,7 @@ from transcribe_integration_helpers import (
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
 WORKING_DIR_TEST_2 = STRATEGY_ROOT / 'tests' / 'test-2'
-TEST_2_CHUNK_PDF_FILENAME = 'test-2.pdf'
+TEST_2_CHUNK_FILENAME = 'test-2.pdf'
 TEST_2_OUTPUT_PATH = WORKING_DIR_TEST_2 / 'transcriptions' / 'test-2_raw.json'
 
 
@@ -25,7 +25,7 @@ def test_live_integration_test_2_produces_raw_json_with_lines():
 
     result = run_live_transcription(
         WORKING_DIR_TEST_2,
-        TEST_2_CHUNK_PDF_FILENAME,
+        TEST_2_CHUNK_FILENAME,
         STRATEGY_PROMPT_PATH,
     )
 

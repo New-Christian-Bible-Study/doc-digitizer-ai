@@ -4,7 +4,7 @@ Export full-page rasters with line box outlines (same geometry as review-chunk-l
 
   python tests/chunk-lines-boxes-export.py --working-dir <dir>   # from prompt-based/
 
-Uses ``--working-dir`` like transcribe-chunk-pdf.py / review-chunk-lines.py. Without
+Uses ``--working-dir`` like transcribe-chunk.py / review-chunk-lines.py. Without
 ``--raw-json``, pick a ``transcriptions/*_raw.json`` interactively (arrow keys). Use
 ``--raw-json`` when stdin is not a TTY (CI / scripts).
 """
@@ -50,7 +50,7 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         argv = sys.argv[1:]
     parser = argparse.ArgumentParser(
         description=(
-            'Draw line box outlines on chunk PDF pages (same padded bounds as '
+            'Draw line box outlines on chunk pages (same padded bounds as '
             'review-chunk-lines) and write PDF or PNG to transcriptions/.'
         ),
     )
@@ -59,7 +59,7 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=Path('.'),
         help=(
-            'Same as transcribe-chunk-pdf.py: directory containing '
+            'Same as transcribe-chunk.py: directory containing '
             'chunk-pdfs/ and transcriptions/'
         ),
     )
@@ -215,12 +215,12 @@ def export_pngs(page_images: list[Image.Image], lines: list, stem: str, out_dir:
 def run() -> int:
     cli = parse_cli_args()
     working_dir = cli.working_dir.resolve()
-    chunk_pdfs_dir = working_dir / 'chunk-pdfs'
+    chunk_dir = working_dir / 'chunk-pdfs'
     transcriptions_dir = working_dir / 'transcriptions'
 
-    if not chunk_pdfs_dir.is_dir():
+    if not chunk_dir.is_dir():
         print(
-            f'Expected a chunk-pdfs directory at {chunk_pdfs_dir}. '
+            f'Expected a chunk-pdfs directory at {chunk_dir}. '
             '--working-dir should be the folder that contains chunk-pdfs/ '
             'and transcriptions/.',
             file=sys.stderr,
@@ -281,7 +281,7 @@ def run() -> int:
             out_fmt = picked
 
     try:
-        page_images = load_page_images(resolved.chunk_pdf_path)
+        page_images = load_page_images(resolved.chunk_path)
     except Exception as exc:
         print(f'Could not rasterize PDF: {exc}', file=sys.stderr)
         return 1

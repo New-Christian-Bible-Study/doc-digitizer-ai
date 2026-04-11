@@ -16,8 +16,8 @@ from jsonargparse import ArgumentParser as JsonArgParser
 from litellm import completion
 from pypdf import PdfReader
 
-from chunk_lines_model import load_page_images, snap_box_2d_to_ink
-from chunk_pdf_generator import ChunkPdfGenerator
+from chunk_generator import ChunkGenerator
+from chunk_lines_model import list_chunk_filenames, load_page_images, snap_box_2d_to_ink
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SCHEMA_PATH = SCRIPT_DIR / 'transcription.schema.json'
@@ -51,43 +51,33 @@ def strip_json_code_fence(content: str) -> str:
     return text
 
 
-def resolve_chunk_pdf(working_dir: Path, chunk_pdf_filename: str) -> Path:
+def resolve_chunk(working_dir: Path, chunk_filename: str) -> Path:
     chunk_dir = working_dir / 'chunk-pdfs'
     if not chunk_dir.exists():
         raise ValueError(
             f'Missing directory: {chunk_dir}. '
-            'Create chunk-pdfs and place a chunk PDF in it.'
+            'Create chunk-pdfs and place a chunk file in it.'
         )
 
-    filename = chunk_pdf_filename.strip()
+    filename = chunk_filename.strip()
     if not filename:
-        raise ValueError('Chunk PDF filename is required.')
+        raise ValueError('Chunk filename is required.')
     if Path(filename).name != filename:
-        raise ValueError('Provide only the chunk PDF filename, not a path.')
+        raise ValueError('Provide only the chunk filename, not a path.')
     if not filename.lower().endswith('.pdf'):
-        raise ValueError("Chunk PDF filename must end with '.pdf'.")
+        raise ValueError("Chunk filename must end with '.pdf'.")
 
-    chunk_pdf_path = chunk_dir / filename
-    if not chunk_pdf_path.exists():
-        raise ValueError(f'Chunk PDF not found: {chunk_pdf_path}')
+    chunk_path = chunk_dir / filename
+    if not chunk_path.exists():
+        raise ValueError(f'Chunk not found: {chunk_path}')
 
-    return chunk_pdf_path
+    return chunk_path
 
 
 def prompt_with_default(label: str, default: str) -> str:
     prompt = f'{label} [{default}]: ' if default else f'{label}: '
     value = input(prompt).strip()
     return value if value else default
-
-
-def list_chunk_pdf_filenames(chunk_dir: Path) -> list[str]:
-    if not chunk_dir.exists() or not chunk_dir.is_dir():
-        return []
-    return sorted(
-        file_path.name
-        for file_path in chunk_dir.iterdir()
-        if file_path.is_file() and file_path.suffix.lower() == '.pdf'
-    )
 
 
 def prompt_select_filename(label: str, default: str, options: list[str]) -> str:
@@ -113,13 +103,13 @@ def prompt_select_filename(label: str, default: str, options: list[str]) -> str:
     return selected
 
 
-def resolve_chunk_pdf_filename(working_dir: Path) -> str:
+def resolve_chunk_filename(working_dir: Path) -> str:
     chunk_dir = working_dir / 'chunk-pdfs'
-    chunk_filenames = list_chunk_pdf_filenames(chunk_dir)
+    filenames = list_chunk_filenames(chunk_dir)
 
     state = {}
     try:
-        state = ChunkPdfGenerator(working_dir=working_dir).load_state()
+        state = ChunkGenerator(working_dir=working_dir).load_state()
     except ValueError:
         state = {}
 
@@ -127,21 +117,19 @@ def resolve_chunk_pdf_filename(working_dir: Path) -> str:
     default_filename = ''
     if isinstance(last_generated, str) and last_generated.strip():
         default_filename = Path(last_generated).name
-    if default_filename not in chunk_filenames:
-        default_filename = (
-            chunk_filenames[0] if chunk_filenames else default_filename
-        )
+    if default_filename not in filenames:
+        default_filename = filenames[0] if filenames else default_filename
 
-    if not chunk_filenames:
+    if not filenames:
         print(
             f'No PDF files found in {chunk_dir}. '
             'Falling back to manual filename entry.'
         )
 
     return prompt_select_filename(
-        label='Chunk PDF filename',
+        label='Chunk filename',
         default=default_filename,
-        options=chunk_filenames,
+        options=filenames,
     )
 
 
@@ -217,11 +205,11 @@ def build_messages(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Transcribe chunk PDF(s) via Gemini/LiteLLM.',
+        description='Transcribe chunk(s) via Gemini/LiteLLM.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '--chunk-pdf',
+        '--chunk',
         required=False,
         default=None,
         help='Filename from chunk-pdfs/ (filename only).',
@@ -241,11 +229,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--all',
         action='store_true',
-        help='Transcribe every PDF in chunk-pdfs/ without prompting (non-interactive).',
+        help='Transcribe every chunk in chunk-pdfs/ without prompting (non-interactive).',
     )
     args = parser.parse_args()
-    if args.all and args.chunk_pdf is not None:
-        parser.error('cannot combine --all with --chunk-pdf')
+    if args.all and args.chunk is not None:
+        parser.error('cannot combine --all with --chunk')
     return args
 
 
@@ -370,11 +358,11 @@ def build_full_transcription_payload(
     }
 
 
-def snap_line_boxes_to_ink(chunk_pdf_path: Path, lines: list[dict]) -> str | None:
+def snap_line_boxes_to_ink(chunk_path: Path, lines: list[dict]) -> str | None:
     """Replace each line's ``box_2d`` with snap-to-ink bounds when detection succeeds."""
     try:
         # Raster once per chunk so --all mode does not re-render per line.
-        page_images = load_page_images(chunk_pdf_path)
+        page_images = load_page_images(chunk_path)
     except Exception as exc:
         return f'Could not rasterize pages for snap-to-ink: {exc}'
 
@@ -409,12 +397,12 @@ def is_notes_min_length_validation_error(exc: jsonschema.ValidationError) -> boo
     )
 
 
-def get_pdf_page_count(pdf_path: Path) -> int:
+def get_page_count(path: Path) -> int:
     try:
-        reader = PdfReader(str(pdf_path))
+        reader = PdfReader(str(path))
         return len(reader.pages)
     except Exception as exc:
-        raise ValueError(f'Could not read PDF page count from {pdf_path}: {exc}') from exc
+        raise ValueError(f'Could not read page count from {path}: {exc}') from exc
 
 
 def extract_usage_tokens(response) -> tuple[object, object, object]:
@@ -439,7 +427,7 @@ def format_token_log_value(value: object) -> str:
 
 
 def build_ai_log_markdown(
-    chunk_pdf_filename: str,
+    chunk_filename: str,
     run_started_at: str,
     total_pages: int,
     inference_time_seconds: object,
@@ -469,7 +457,7 @@ def build_ai_log_markdown(
 
     return (
         '# AI transcription run log\n\n'
-        f'- Chunk PDF file: `{chunk_pdf_filename}`\n'
+        f'- Chunk file: `{chunk_filename}`\n'
         f'- Run started at: `{run_started_at}`\n'
         f'- Total pages: `{total_pages}`\n'
         f'- Total inference time (minutes): `{inference_time_text}`\n'
@@ -493,11 +481,11 @@ def build_ai_log_markdown(
 
 def write_raw_response_debug_file(
     transcriptions_dir: Path,
-    chunk_pdf_stem: str,
+    chunk_stem: str,
     content: object,
 ) -> Path:
     transcriptions_dir.mkdir(parents=True, exist_ok=True)
-    raw_response_path = transcriptions_dir / f'{chunk_pdf_stem}-raw-response.txt'
+    raw_response_path = transcriptions_dir / f'{chunk_stem}-raw-response.txt'
     response_text = '' if content is None else str(content)
     raw_response_path.write_text(response_text + '\n', encoding='utf-8')
     return raw_response_path
@@ -539,27 +527,27 @@ def transcribe_single_chunk(
     transcribe_config: dict,
     config_path: Path,
     schema: dict,
-    chunk_pdf_filename: str,
+    chunk_filename: str,
 ) -> int:
     run_started_at = datetime.now().strftime('%Y-%m-%d %H:%M')
     try:
-        chunk_pdf_path = resolve_chunk_pdf(working_dir, chunk_pdf_filename)
+        chunk_path = resolve_chunk(working_dir, chunk_filename)
     except ValueError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 2
     try:
-        total_pages = get_pdf_page_count(chunk_pdf_path)
+        total_pages = get_page_count(chunk_path)
     except ValueError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 2
 
     prompt_text = prompt_md.read_text(encoding='utf-8')
     transcribe_config_text = config_path.read_text(encoding='utf-8').strip()
-    encoded_pdf = base64.b64encode(chunk_pdf_path.read_bytes()).decode('utf-8')
+    encoded_pdf = base64.b64encode(chunk_path.read_bytes()).decode('utf-8')
     pdf_data_url = f'data:application/pdf;base64,{encoded_pdf}'
     print(f'Using prompt file: {prompt_md}')
     print(
-        f'Transcribing {chunk_pdf_path.name} with {transcribe_config["model"]} '
+        f'Transcribing {chunk_path.name} with {transcribe_config["model"]} '
         f'(timeout={transcribe_config["timeout_seconds"]:.0f}s); '
         'this can take a while...',
         flush=True,
@@ -599,7 +587,7 @@ def transcribe_single_chunk(
         transcriptions_dir = working_dir / 'transcriptions'
         raw_response_path = write_raw_response_debug_file(
             transcriptions_dir=transcriptions_dir,
-            chunk_pdf_stem=chunk_pdf_path.stem,
+            chunk_stem=chunk_path.stem,
             content=content,
         )
         print(f'Error parsing model response JSON: {exc}', file=sys.stderr)
@@ -641,7 +629,7 @@ def transcribe_single_chunk(
     # Run snap-to-ink after schema validation so we only post-process well-formed data.
     # This step corrects the VLM's natural "coordinate drift" by adjusting the raw
     # `box_2d` coordinates to perfectly wrap the physical ink printed on the page.
-    snap_err = snap_line_boxes_to_ink(chunk_pdf_path, llm_payload['lines'])
+    snap_err = snap_line_boxes_to_ink(chunk_path, llm_payload['lines'])
     if snap_err is not None:
         print(f'Warning: {snap_err}', file=sys.stderr)
 
@@ -649,15 +637,15 @@ def transcribe_single_chunk(
 
     transcriptions_dir = working_dir / 'transcriptions'
     transcriptions_dir.mkdir(parents=True, exist_ok=True)
-    output_raw_json = transcriptions_dir / f'{chunk_pdf_path.stem}_raw.json'
-    output_ai_log_md = transcriptions_dir / f'{chunk_pdf_path.stem}-ai-log.md'
+    output_raw_json = transcriptions_dir / f'{chunk_path.stem}_raw.json'
+    output_ai_log_md = transcriptions_dir / f'{chunk_path.stem}-ai-log.md'
     output_raw_json.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + '\n',
         encoding='utf-8',
     )
     output_ai_log_md.write_text(
         build_ai_log_markdown(
-            chunk_pdf_filename=chunk_pdf_path.name,
+            chunk_filename=chunk_path.name,
             run_started_at=run_started_at,
             total_pages=total_pages,
             inference_time_seconds=inference_time_seconds,
@@ -713,7 +701,7 @@ def main() -> int:
 
     if args.all:
         chunk_dir = working_dir / 'chunk-pdfs'
-        chunk_filenames = list_chunk_pdf_filenames(chunk_dir)
+        chunk_filenames = list_chunk_filenames(chunk_dir)
         if not chunk_filenames:
             print(
                 f'Error: No PDF files in {chunk_dir}. Nothing to transcribe.',
@@ -721,23 +709,23 @@ def main() -> int:
             )
             return 2
         print(f'--all: transcribing {len(chunk_filenames)} chunk(s).', flush=True)
-        for chunk_pdf_filename in chunk_filenames:
-            print(f'--- {chunk_pdf_filename} ---', flush=True)
+        for chunk_filename in chunk_filenames:
+            print(f'--- {chunk_filename} ---', flush=True)
             rc = transcribe_single_chunk(
                 working_dir,
                 prompt_md,
                 transcribe_config,
                 config_path,
                 schema,
-                chunk_pdf_filename,
+                chunk_filename,
             )
             if rc != 0:
                 return rc
         return 0
 
-    chunk_pdf_filename = args.chunk_pdf
-    if chunk_pdf_filename is None:
-        chunk_pdf_filename = resolve_chunk_pdf_filename(working_dir)
+    chunk_filename = args.chunk
+    if chunk_filename is None:
+        chunk_filename = resolve_chunk_filename(working_dir)
 
     return transcribe_single_chunk(
         working_dir,
@@ -745,7 +733,7 @@ def main() -> int:
         transcribe_config,
         config_path,
         schema,
-        chunk_pdf_filename,
+        chunk_filename,
     )
 
 

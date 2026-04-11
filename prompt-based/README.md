@@ -5,7 +5,7 @@ This repository provides script tooling for transcribing handwritten and typewri
 ## Goals
 
 - Leverage AI as much as possible for transcribing handwritten and typewritten text.
-- Make large transcription projects manageable by splitting source PDFs into chunk PDFs.
+- Make large transcription projects manageable by splitting source PDFs into chunks.
 - Improve quality and efficiency by fixing prompts early based on human transcription corrections before generating chunks for later sections.
 - Avoid processing too many pages at once, which can hit model token limits.
 
@@ -26,7 +26,7 @@ Create one dedicated working directory per work/book/manuscript and run the scri
 | Path | Purpose |
 | --- | --- |
 | `source-pdfs/` | Source PDFs to transcribe. |
-| `chunk-pdfs/` | Chunk PDFs generated from page ranges in a source PDF. |
+| `chunk-pdfs/` | Chunks (PDF files) generated from page ranges in a source PDF. |
 | `transcriptions/` | Raw/final JSON transcriptions and AI run logs. Created automatically as needed. |
 
 ### Files
@@ -53,35 +53,35 @@ my-work/
 
 From the **repository root**, invoke scripts under `prompt-based/` and pass working dirs as `prompt-based/tests/...` or your own work folder under `prompt-based/`. Alternatively, `cd prompt-based` and use paths relative to that directory (for example `--working-dir tests/test-1`).
 
-## Generate a chunk PDF
+## Generate a chunk
 
-`generate-chunk-pdf.py` extracts selected pages from a source PDF in `source-pdfs/` and writes a chunk PDF to `chunk-pdfs/`.
+`generate-chunk.py` extracts selected pages from a source PDF in `source-pdfs/` and writes a chunk file to `chunk-pdfs/`.
 
 ```bash
 # from repository root:
-python prompt-based/generate-chunk-pdf.py --working-dir prompt-based/tests/test-1
+python prompt-based/generate-chunk.py --working-dir prompt-based/tests/test-1
 # or from prompt-based/:
-cd prompt-based && python generate-chunk-pdf.py --working-dir tests/test-1
+cd prompt-based && python generate-chunk.py --working-dir tests/test-1
 ```
 
 The script prompts for:
 
-- Source PDF filename (filename only, chosen from `source-pdfs/`)
-- Start PDF page
-- End PDF page
-- Output chunk PDF filename (editable default)
+- Source filename (filename only, chosen from `source-pdfs/`)
+- Start page
+- End page
+- Output chunk filename (editable default)
 
 Default output naming:
 
 - `<scan_chunk_stem>_<start:03d>-<end:03d>.pdf`
 - Example: `test-a_001-005.pdf`
 
-## Transcribe a chunk PDF
+## Transcribe a chunk
 
-`transcribe-chunk-pdf.py` transcribes a file from `chunk-pdfs/` into:
+`transcribe-chunk.py` transcribes a file from `chunk-pdfs/` into:
 
-- `transcriptions/<chunk_pdf_stem>_raw.json` — per-line text with `box_2d` coordinates (Pass 1)
-- `transcriptions/<chunk_pdf_stem>-ai-log.md`
+- `transcriptions/<chunk_stem>_raw.json` — per-line text with `box_2d` coordinates (Pass 1)
+- `transcriptions/<chunk_stem>-ai-log.md`
 
 By default a Gemini model is used to do the transcription. 
 To create a Gemini API key: [Google AI Studio - Get API key](https://ai.google.dev/gemini-api/docs/api-key)
@@ -98,14 +98,14 @@ export GEMINI_API_KEY=...
 
 ```bash
 export GEMINI_API_KEY=...
-python prompt-based/transcribe-chunk-pdf.py --working-dir prompt-based/tests/test-1
+python prompt-based/transcribe-chunk.py --working-dir prompt-based/tests/test-1
 ```
 
 ### Notes
 
 - `transcriptions/` is created automatically if it does not exist.
-- `--chunk-pdf` is optional. If omitted, you choose from `chunk-pdfs/` interactively. The default selection uses `.chunk-state.json` (`last_generated_output`) when available.
-- `--chunk-pdf` must be a filename only (no path).
+- `--chunk` is optional. If omitted, you choose from `chunk-pdfs/` interactively. The default selection uses `.chunk-state.json` (`last_generated_output`) when available.
+- `--chunk` must be a filename only (no path).
 - `--prompt-md` is optional. If omitted, the script searches for `*prompt*.md` in the working directory:
   - if exactly one file matches, it is used automatically
   - if multiple files match, you can choose interactively
@@ -117,22 +117,24 @@ python prompt-based/transcribe-chunk-pdf.py --working-dir prompt-based/tests/tes
 
 ## Review and correct transcriptions (human pass)
 
-This step does **not** call the model. You still run `transcribe-chunk-pdf.py` first (Pass 1) to produce `transcriptions/<stem>_raw.json`. The PySide6 app (`review-chunk-lines.py`) loads that JSON, shows each line’s crop next to editable text, and saves `transcriptions/<stem>_final.json`.
+This step does **not** call the model. You still run `transcribe-chunk.py` first (Pass 1) to produce `transcriptions/<stem>_raw.json`. The PySide6 app (`review-chunk-lines.py`) loads that JSON, shows each line’s crop next to editable text, and saves `transcriptions/<stem>_final.json`.
 
 **System dependency:** [Poppler](https://poppler.freedesktop.org/) must be installed so `pdf2image` can rasterize the PDF (on Ubuntu: `sudo apt install poppler-utils`).
 
 The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Pass 1 sends the **PDF** to the model, while the UI uses Poppler — normalized `box_2d` line crops are **best-effort** aligned to the page aspect ratio; Gemini’s internal render may differ slightly.
 
-`--working-dir` is the same as for `transcribe-chunk-pdf.py`: the directory that contains `chunk-pdfs/` and `transcriptions/` (not those subfolders themselves).
+`--working-dir` is the same as for `transcribe-chunk.py`: the directory that contains `chunk-pdfs/` and `transcriptions/` (not those subfolders themselves).
 
 ```bash
-python review-chunk-lines.py --working-dir . --chunk-pdf your-chunk.pdf
+python review-chunk-lines.py --working-dir .
 ```
 
-Example using the `tests/test-1` fixture (after the chunk PDF and `tests/test-1/transcriptions/..._raw.json` exist):
+Pick the chunk from the **Chunk** dropdown (files in `chunk-pdfs/`).
+
+Example using the `tests/test-1` fixture (after the chunk file and `tests/test-1/transcriptions/..._raw.json` exist):
 
 ```bash
-python prompt-based/review-chunk-lines.py --working-dir prompt-based/tests/test-1 --chunk-pdf test-a_001-003.pdf
+python prompt-based/review-chunk-lines.py --working-dir prompt-based/tests/test-1
 ```
 
 - `--raw-json` is optional; defaults to `<working-dir>/transcriptions/<stem>_raw.json`. Relative paths are resolved under `--working-dir`.
@@ -141,7 +143,7 @@ python prompt-based/review-chunk-lines.py --working-dir prompt-based/tests/test-
 
 ## Build PDFs from transcriptions (AsciiDoc)
 
-`transcribe-chunk-pdf.py` does not emit `.adoc` files; it writes `*_raw.json`. You can later stitch corrected `*_final.json` content into AsciiDoc for publishing. This script is for when you already have `.adoc` sources under `transcriptions/`.
+`transcribe-chunk.py` does not emit `.adoc` files; it writes `*_raw.json`. You can later stitch corrected `*_final.json` content into AsciiDoc for publishing. This script is for when you already have `.adoc` sources under `transcriptions/`.
 
 `build-transcribed-chunk-pdfs.py` walks `--working-dir`, finds every directory named `transcriptions`, and runs [Asciidoctor PDF](https://asciidoctor.org/docs/asciidoctor-pdf/) on each `.adoc` file in that directory. It writes `<stem>-transcription.pdf` beside `<stem>.adoc` (for example `chunk-1.adoc` to `chunk-1-transcription.pdf`).
 

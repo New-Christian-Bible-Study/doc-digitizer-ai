@@ -6,7 +6,7 @@ from pathlib import Path
 
 import questionary
 
-from chunk_pdf_generator import ChunkPdfGenerator
+from chunk_generator import ChunkGenerator
 
 
 def prompt_with_default(label: str, default: str) -> str:
@@ -31,7 +31,7 @@ def prompt_int(label: str, default: int) -> int:
         return parsed_value
 
 
-def list_source_pdf_filenames(source_dir: Path) -> list[str]:
+def list_source_filenames(source_dir: Path) -> list[str]:
     if not source_dir.exists() or not source_dir.is_dir():
         return []
     return sorted(
@@ -68,7 +68,7 @@ def prompt_source_filename(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Create chunk PDFs from source PDFs in source-pdfs/.'
+        description='Create chunks from sources in source-pdfs/.'
     )
     parser.add_argument(
         '--working-dir',
@@ -77,7 +77,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    generator = ChunkPdfGenerator(working_dir=Path(args.working_dir))
+    generator = ChunkGenerator(working_dir=Path(args.working_dir))
 
     try:
         state = generator.load_state()
@@ -86,30 +86,30 @@ def main() -> int:
         return 1
 
     source_default = state.get('last_source_filename', '')
-    source_filenames = list_source_pdf_filenames(generator.scan_dir)
+    source_filenames = list_source_filenames(generator.scan_dir)
     if not source_filenames:
         print(
             f'No PDF files found in {generator.scan_dir}. '
             'Falling back to manual filename entry.'
         )
     source_filename = prompt_source_filename(
-        'Source PDF filename', source_default, source_filenames
+        'Source filename', source_default, source_filenames
     )
 
     start_default = generator.get_default_start_page(state)
-    start_page = prompt_int('Start PDF page', start_default)
+    start_page = prompt_int('Start page', start_default)
 
-    end_page = prompt_int('End PDF page', start_page)
+    end_page = prompt_int('End page', start_page)
 
     try:
-        source_pdf_path = generator.resolve_source_pdf(source_filename)
+        source_path = generator.resolve_source(source_filename)
         default_output_name = generator.build_default_filename(
-            source_pdf_path, start_page, end_page
+            source_path, start_page, end_page
         )
         output_filename = prompt_with_default(
-            'Output chunk PDF filename', default_output_name
+            'Output chunk filename', default_output_name
         )
-        output_pdf = generator.create_chunk_pdf(
+        output = generator.create_chunk(
             source_filename=source_filename,
             start_page=start_page,
             end_page=end_page,
@@ -119,7 +119,7 @@ def main() -> int:
         print(f'Error: {exc}')
         return 1
 
-    print(f'Created chunk PDF: {output_pdf}')
+    print(f'Created chunk: {output}')
     return 0
 
 

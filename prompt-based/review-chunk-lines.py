@@ -37,7 +37,7 @@ from chunk_lines_model import (
     ChunkLinesSession,
     line_confidence_label,
     line_notes,
-    list_chunk_pdf_filenames,
+    list_chunk_filenames,
     normalized_center_y_for_line,
 )
 
@@ -64,14 +64,14 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
     if argv is None:
         argv = sys.argv[1:]
     parser = argparse.ArgumentParser(
-        description='Review and correct per-line transcriptions for a chunk PDF.',
+        description='Review and correct per-line transcriptions for a chunk.',
     )
     parser.add_argument(
         '--working-dir',
         type=Path,
         default=Path('.'),
         help=(
-            'Same as transcribe-chunk-pdf.py: directory containing '
+            'Same as transcribe-chunk.py: directory containing '
             'chunk-pdfs/ and transcriptions/'
         ),
     )
@@ -93,12 +93,12 @@ class ReviewMainWindow(QMainWindow):
     def __init__(
         self,
         working_dir: Path,
-        chunk_pdf_names: list[str],
+        chunk_filenames: list[str],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._working_dir = working_dir.resolve()
-        self._chunk_pdf_names = chunk_pdf_names
+        self._chunk_filenames = chunk_filenames
         self._line_edits: list[FocusLineEdit] = []
         self._line_badges: list[QLabel] = []
         self._line_notes: list[QLabel] = []
@@ -113,7 +113,7 @@ class ReviewMainWindow(QMainWindow):
         self._fit_scale: float = 1.0
 
         root = self._init_window_shell()
-        self._add_chunk_pdf_row(root, chunk_pdf_names)
+        self._add_chunk_row(root, chunk_filenames)
         self._add_paths_row(root)
         self._add_error_label(root)
         self._add_dual_pane(root)
@@ -141,14 +141,14 @@ class ReviewMainWindow(QMainWindow):
         root.setSpacing(4)
         return root
 
-    def _add_chunk_pdf_row(self, root: QVBoxLayout, chunk_pdf_names: list[str]):
+    def _add_chunk_row(self, root: QVBoxLayout, chunk_filenames: list[str]):
         """Dropdown listing ``chunk-pdfs/*.pdf`` so the user picks the active chunk."""
         chunk_row = QHBoxLayout()
         chunk_row.setSpacing(8)
-        chunk_row.addWidget(QLabel('Chunk PDF'))
+        chunk_row.addWidget(QLabel('Chunk'))
         self._chunk_combo = QComboBox()
         self._chunk_combo.setMinimumWidth(280)
-        self._chunk_combo.addItems(chunk_pdf_names)
+        self._chunk_combo.addItems(chunk_filenames)
         chunk_row.addWidget(self._chunk_combo)
         chunk_row.addStretch()
         root.addLayout(chunk_row)
@@ -238,8 +238,8 @@ class ReviewMainWindow(QMainWindow):
         return self._working_dir
 
     @property
-    def chunk_pdf_names(self) -> list[str]:
-        return self._chunk_pdf_names
+    def chunk_filenames(self) -> list[str]:
+        return self._chunk_filenames
 
     @property
     def chunk_combo(self) -> QComboBox:
@@ -529,7 +529,7 @@ class ReviewChunkLinesController:
         view.connect_controller_signals(self)
 
     def try_initial_chunk(self) -> None:
-        names = self._view.chunk_pdf_names
+        names = self._view.chunk_filenames
         for name in names:
             if self._load_chunk(name, show_error=False):
                 self._view.sync_combo_to_chunk_name(
@@ -683,19 +683,19 @@ class ReviewChunkLinesController:
 def main() -> int:
     cli = parse_cli_args()
     working_dir = cli.working_dir.resolve()
-    chunk_pdfs_dir = working_dir / 'chunk-pdfs'
-    if not chunk_pdfs_dir.is_dir():
+    chunk_dir = working_dir / 'chunk-pdfs'
+    if not chunk_dir.is_dir():
         print(
-            f'Expected a chunk-pdfs directory at {chunk_pdfs_dir}. '
+            f'Expected a chunk-pdfs directory at {chunk_dir}. '
             '--working-dir should be the folder that contains chunk-pdfs/ '
             'and transcriptions/.',
             file=sys.stderr,
         )
         return 1
 
-    pdf_names = list_chunk_pdf_filenames(chunk_pdfs_dir)
+    pdf_names = list_chunk_filenames(chunk_dir)
     if not pdf_names:
-        print(f'No .pdf files found in {chunk_pdfs_dir}', file=sys.stderr)
+        print(f'No .pdf files found in {chunk_dir}', file=sys.stderr)
         return 1
 
     app = QApplication(sys.argv)

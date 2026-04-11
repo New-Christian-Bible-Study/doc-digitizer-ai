@@ -14,13 +14,13 @@ from transcribe_integration_helpers import (
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
 WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
-TEST_1_CHUNK_PDF_FILENAME = 'test-a_001-003.pdf'
+TEST_1_CHUNK_FILENAME = 'test-a_001-003.pdf'
 TEST_1_OUTPUT_PATH = WORKING_DIR / 'transcriptions' / 'test-a_001-003_raw.json'
 TEST_1_AI_LOG_PATH = WORKING_DIR / 'transcriptions' / 'test-a_001-003-ai-log.md'
 
 
 def ensure_review_pdf_exists():
-    review_pdf = WORKING_DIR / 'chunk-pdfs' / TEST_1_CHUNK_PDF_FILENAME
+    review_pdf = WORKING_DIR / 'chunk-pdfs' / TEST_1_CHUNK_FILENAME
     if review_pdf.exists():
         return
 
@@ -45,7 +45,7 @@ def test_live_integration_test_1_transcribes_and_logs():
         TEST_1_AI_LOG_PATH.unlink()
 
     result = run_live_transcription(
-        WORKING_DIR, TEST_1_CHUNK_PDF_FILENAME, STRATEGY_PROMPT_PATH
+        WORKING_DIR, TEST_1_CHUNK_FILENAME, STRATEGY_PROMPT_PATH
     )
 
     assert result.returncode == 0, result.stderr
@@ -58,7 +58,7 @@ def test_live_integration_test_1_transcribes_and_logs():
     assert raw_payload['lines'][0]['box_2d'] is not None
     assert len(raw_payload['lines'][0]['box_2d']) == 4
     ai_log_text = TEST_1_AI_LOG_PATH.read_text(encoding='utf-8')
-    assert_common_ai_log_fields(ai_log_text, TEST_1_CHUNK_PDF_FILENAME)
+    assert_common_ai_log_fields(ai_log_text, TEST_1_CHUNK_FILENAME)
 
 
 if __name__ == '__main__':

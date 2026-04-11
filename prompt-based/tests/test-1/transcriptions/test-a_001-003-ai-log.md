@@ -1,6 +1,6 @@
 # AI transcription run log
 
-- Chunk PDF file: `test-a_001-003.pdf`
+- Chunk file: `test-a_001-003.pdf`
 - Run started at: `2026-04-09 16:22`
 - Total pages: `3`
 - Total inference time (minutes): `0.30`
@@ -36,7 +36,7 @@
 
 **Output Format:**
 Return a single JSON **object** with a key `"lines"` whose value is an array. Every line of text on every page must be its own element in that array. Each element is an object containing:
-1. `"page_number"`: The page within **this chunk PDF** where the text appears. Use **1-based** indexing: the first page of the chunk is `1`, the second is `2`, and so on (this matches `images[page_number - 1]` when the chunk is rasterized page-by-page).
+1. `"page_number"`: The page within **this chunk** where the text appears. Use **1-based** indexing: the first page of the chunk is `1`, the second is `2`, and so on (this matches `images[page_number - 1]` when the chunk is rasterized page-by-page).
 2. `"text"`: The transcription of the line following the rules below.
 3. `"box_2d"`: `[ymin, xmin, ymax, xmax]` coordinates for the line bounding region, **normalized 0–1000** (integers) relative to that page’s width and height.
 4. `"confidence_label"`: One of `low`, `medium`, or `high` for this specific line.

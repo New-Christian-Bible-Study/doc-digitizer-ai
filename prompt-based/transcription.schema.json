@@ -17,7 +17,7 @@
           "page_number": {
             "type": "integer",
             "minimum": 1,
-            "description": "1-based page index within this chunk PDF"
+            "description": "1-based page index within this chunk"
           },
           "text": {
             "type": "string",

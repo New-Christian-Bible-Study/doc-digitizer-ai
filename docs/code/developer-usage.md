@@ -35,7 +35,7 @@ Example `transcribe.config.json`:
   "temperature": 0.0,
   "reasoning_effort": "medium",
   "media_resolution": "high",
-  "sys_instructions": "Transcribe this chunk PDF …"
+  "sys_instructions": "Transcribe this chunk …"
 }
 ```
 

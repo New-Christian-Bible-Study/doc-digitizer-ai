@@ -1,5 +1,5 @@
 """
-Chunk PDF line transcriptions: paths, JSON payload, page rasters, and box geometry.
+Chunk line transcriptions: paths, JSON payload, page rasters, and box geometry.
 
 No Qt — safe to import from CLI tools or other UIs besides the line reviewer.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 from pdf2image import convert_from_path
 from PIL import Image
 
-# Line review rasterizes chunk PDFs with Poppler at this DPI so crop geometry is stable
+# Line review rasterizes chunk files with Poppler at this DPI so crop geometry is stable
 # across machines. Pass 1 sends the PDF bytes to the model; Gemini's internal render may
 # differ slightly — ``box_2d`` crops in the UI are best-effort vs page aspect ratio.
 REVIEW_PDF_RASTER_DPI = 200
@@ -64,7 +64,7 @@ CROP_PAD_X_BOX_W_OFFSET = 1
 # - Local search avoids accidentally snapping to nearby paragraphs or adjacent columns.
 # - If the projection profile confidence is weak, callers can fall back to the original box.
 #
-# During the transcription phase (`transcribe-chunk-pdf.py`), this successful snap output
+# During the transcription phase (`transcribe-chunk.py`), this successful snap output
 # is written back into the JSON payload's `box_2d` so the reviewer UI code remains simple,
 # fast, and perfectly aligned at runtime.
 # Snap-to-ink tuning for line-level projection profiling.
@@ -96,7 +96,7 @@ def editable_line_indices(lines: list) -> list[int]:
     return [i for i, ln in enumerate(lines) if not is_injected_page_marker(ln.get('text', ''))]
 
 
-def list_chunk_pdf_filenames(chunk_dir: Path) -> list[str]:
+def list_chunk_filenames(chunk_dir: Path) -> list[str]:
     if not chunk_dir.exists() or not chunk_dir.is_dir():
         return []
     return sorted(
@@ -108,10 +108,10 @@ def list_chunk_pdf_filenames(chunk_dir: Path) -> list[str]:
 
 @dataclass(frozen=True)
 class TranscriptionPaths:
-    """Resolved absolute paths for the chunk PDF and JSON; ``stem`` is chunk filename without .pdf."""
+    """Resolved absolute paths for the chunk file and JSON; ``stem`` is chunk filename without .pdf."""
 
     working_dir: Path
-    chunk_pdf_path: Path
+    chunk_path: Path
     raw_path: Path
     final_path: Path
     chunk_name: str
@@ -124,25 +124,25 @@ def resolve_transcription_paths_for_chunk(
     raw_json: Path | None,
 ) -> TranscriptionPaths | str:
     working_dir = working_dir.resolve()
-    chunk_pdfs_dir = working_dir / 'chunk-pdfs'
+    chunk_dir = working_dir / 'chunk-pdfs'
     transcriptions_dir = working_dir / 'transcriptions'
-    if not chunk_pdfs_dir.is_dir():
+    if not chunk_dir.is_dir():
         return (
-            f'Expected a chunk-pdfs directory at {chunk_pdfs_dir}. '
+            f'Expected a chunk-pdfs directory at {chunk_dir}. '
             '--working-dir should be the project/work folder that contains '
             'chunk-pdfs/ (and usually transcriptions/), same as '
-            'transcribe-chunk-pdf.py.'
+            'transcribe-chunk.py.'
         )
 
     chunk_name = chunk_name.strip()
     if Path(chunk_name).name != chunk_name:
-        return 'Use chunk PDF filename only, not a path.'
+        return 'Use chunk filename only, not a path.'
     if not chunk_name.lower().endswith('.pdf'):
-        return "Chunk PDF filename must end with '.pdf'."
+        return "Chunk filename must end with '.pdf'."
 
-    chunk_pdf_path = chunk_pdfs_dir / chunk_name
-    if not chunk_pdf_path.is_file():
-        return f'Chunk PDF not found: {chunk_pdf_path}'
+    chunk_path = chunk_dir / chunk_name
+    if not chunk_path.is_file():
+        return f'Chunk not found: {chunk_path}'
 
     stem = Path(chunk_name).stem
     if raw_json is not None:
@@ -161,7 +161,7 @@ def resolve_transcription_paths_for_chunk(
 
     return TranscriptionPaths(
         working_dir=working_dir,
-        chunk_pdf_path=chunk_pdf_path,
+        chunk_path=chunk_path,
         raw_path=raw_path,
         final_path=final_path,
         chunk_name=chunk_name,
@@ -478,7 +478,7 @@ class ChunkLinesSession:
         chunk_name: str,
         raw_json_cli: Path | None,
     ) -> str | None:
-        """Load PDF + JSON into this session. Returns an error message, or ``None`` on success."""
+        """Load chunk file + JSON into this session. Returns an error message, or ``None`` on success."""
         resolved = resolve_transcription_paths_for_chunk(
             working_dir,
             chunk_name,
@@ -489,10 +489,10 @@ class ChunkLinesSession:
         # On failure below (or invalid payload), return without mutating ``self`` so a
         # previously loaded chunk remains active (do not clear the session at the start).
         try:
-            page_images = load_page_images(resolved.chunk_pdf_path)
+            page_images = load_page_images(resolved.chunk_path)
             payload = load_payload(resolved.raw_path, resolved.final_path)
         except Exception as exc:
-            return f'Could not read PDF or JSON. {exc}'
+            return f'Could not read chunk or JSON. {exc}'
 
         lines = payload.get('lines')
         if not isinstance(lines, list) or not lines:

@@ -29,6 +29,7 @@ from chunk_lines_model import (
     is_injected_page_marker,
     load_page_images,
     load_payload,
+    resolve_chunk_pdf_dir,
     resolve_transcription_paths_for_chunk,
 )
 
@@ -60,7 +61,16 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path('.'),
         help=(
             'Same as transcribe-chunk.py: directory containing '
-            'chunk-pdfs/ and transcriptions/'
+            'chunk-pdfs/ (or use --chunk-dir) and transcriptions/'
+        ),
+    )
+    parser.add_argument(
+        '--chunk-dir',
+        type=Path,
+        default=None,
+        help=(
+            'Directory containing chunk PDFs (default: working-dir/chunk-pdfs). '
+            'Relative paths are resolved under working-dir.'
         ),
     )
     parser.add_argument(
@@ -215,13 +225,13 @@ def export_pngs(page_images: list[Image.Image], lines: list, stem: str, out_dir:
 def run() -> int:
     cli = parse_cli_args()
     working_dir = cli.working_dir.resolve()
-    chunk_dir = working_dir / 'chunk-pdfs'
+    chunk_pdf_dir = resolve_chunk_pdf_dir(working_dir, cli.chunk_dir)
     transcriptions_dir = working_dir / 'transcriptions'
 
-    if not chunk_dir.is_dir():
+    if not chunk_pdf_dir.is_dir():
         print(
-            f'Expected a chunk-pdfs directory at {chunk_dir}. '
-            '--working-dir should be the folder that contains chunk-pdfs/ '
+            f'Expected a chunk PDF directory at {chunk_pdf_dir}. '
+            'Use --chunk-dir or ensure working-dir contains chunk-pdfs/ '
             'and transcriptions/.',
             file=sys.stderr,
         )
@@ -265,6 +275,7 @@ def run() -> int:
         working_dir,
         chunk_name,
         raw_path,
+        chunk_pdf_dir,
     )
     if isinstance(resolved, str):
         print(resolved, file=sys.stderr)

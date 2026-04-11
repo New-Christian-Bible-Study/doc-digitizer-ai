@@ -53,15 +53,37 @@ my-work/
 
 From the **repository root**, invoke scripts under `prompt-based/` and pass working dirs as `prompt-based/tests/...` or your own work folder under `prompt-based/`. Alternatively, `cd prompt-based` and use paths relative to that directory (for example `--working-dir tests/test-1`).
 
+### Chunk directory override (`--chunk-dir`)
+
+By default, chunk PDFs live under `<working-dir>/chunk-pdfs/`. These tools also accept **`--chunk-dir`** so chunks can sit elsewhere (for example under `stress-tests/` in the repo) while `source-pdfs/`, `transcriptions/`, `transcribe.config.json`, and `.chunk-state.json` stay under **`--working-dir`**:
+
+- **`transcribe-chunk.py`** — read chunk PDFs from the given directory.
+- **`generate-chunk.py`** — write extracted chunks to the given directory.
+- **`review-chunk-lines.py`** — list and load chunk PDFs from the given directory.
+- **`tests/chunk-lines-boxes-export.py`** — rasterize the chunk PDF from the given directory (run from `prompt-based/`).
+
+Path rules:
+
+- **Absolute** `--chunk-dir` values are resolved as usual.
+- **Relative** values are resolved under **`--working-dir`** (same pattern as `--raw-json`).
+
 ## Generate a chunk
 
-`generate-chunk.py` extracts selected pages from a source PDF in `source-pdfs/` and writes a chunk file to `chunk-pdfs/`.
+`generate-chunk.py` extracts selected pages from a source PDF in `source-pdfs/` and writes a chunk file to `chunk-pdfs/` by default, or to **`--chunk-dir`** when set.
 
 ```bash
 # from repository root:
 python prompt-based/generate-chunk.py --working-dir prompt-based/tests/test-1
 # or from prompt-based/:
 cd prompt-based && python generate-chunk.py --working-dir tests/test-1
+```
+
+To write chunks somewhere other than `working-dir/chunk-pdfs/`:
+
+```bash
+python prompt-based/generate-chunk.py --working-dir my-work --chunk-dir /path/to/shared/chunks
+# relative to working-dir:
+python prompt-based/generate-chunk.py --working-dir my-work --chunk-dir ../other-project/chunk-pdfs
 ```
 
 The script prompts for:
@@ -78,7 +100,7 @@ Default output naming:
 
 ## Transcribe a chunk
 
-`transcribe-chunk.py` transcribes a file from `chunk-pdfs/` into:
+`transcribe-chunk.py` transcribes a file from `chunk-pdfs/` (or from **`--chunk-dir`**) into:
 
 - `transcriptions/<chunk_stem>_raw.json` — per-line text with `box_2d` coordinates (Pass 1)
 - `transcriptions/<chunk_stem>-ai-log.md`
@@ -104,7 +126,8 @@ python prompt-based/transcribe-chunk.py --working-dir prompt-based/tests/test-1
 ### Notes
 
 - `transcriptions/` is created automatically if it does not exist.
-- `--chunk` is optional. If omitted, you choose from `chunk-pdfs/` interactively. The default selection uses `.chunk-state.json` (`last_generated_output`) when available.
+- `--chunk-dir` is optional. If omitted, chunks are read from `<working-dir>/chunk-pdfs/`.
+- `--chunk` is optional. If omitted, you choose from the chunk directory interactively. The default selection uses `.chunk-state.json` (`last_generated_output`) when available.
 - `--chunk` must be a filename only (no path).
 - `--prompt-md` is optional. If omitted, the script searches for `*prompt*.md` in the working directory:
   - if exactly one file matches, it is used automatically
@@ -123,13 +146,13 @@ This step does **not** call the model. You still run `transcribe-chunk.py` first
 
 The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Pass 1 sends the **PDF** to the model, while the UI uses Poppler — normalized `box_2d` line crops are **best-effort** aligned to the page aspect ratio; Gemini’s internal render may differ slightly.
 
-`--working-dir` is the same as for `transcribe-chunk.py`: the directory that contains `chunk-pdfs/` and `transcriptions/` (not those subfolders themselves).
+`--working-dir` is the same as for `transcribe-chunk.py`: the directory that holds `transcriptions/` and usually `source-pdfs/` / config (not those subfolders themselves). Chunk PDFs default to `<working-dir>/chunk-pdfs/` unless you pass **`--chunk-dir`**.
 
 ```bash
 python review-chunk-lines.py --working-dir .
 ```
 
-Pick the chunk from the **Chunk** dropdown (files in `chunk-pdfs/`).
+Pick the chunk from the **Chunk** dropdown (PDFs in the chunk directory).
 
 Example using the `tests/test-1` fixture (after the chunk file and `tests/test-1/transcriptions/..._raw.json` exist):
 
@@ -156,3 +179,5 @@ python prompt-based/build-transcribed-chunk-pdfs.py --working-dir prompt-based/t
 ## Developer docs
 
 Developer-oriented content (tests, fixtures, implementation notes) is in [`docs/code/`](../docs/code/) at the repository root, starting with [`developer-usage.md`](../docs/code/developer-usage.md).
+
+The helper script `tests/chunk-lines-boxes-export.py` supports **`--chunk-dir`** the same way as `review-chunk-lines.py` when exporting box overlays for debugging.

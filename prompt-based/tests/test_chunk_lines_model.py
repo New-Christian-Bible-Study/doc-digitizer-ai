@@ -1,11 +1,16 @@
 """Tests for ``chunk_lines_model`` geometry and line metadata helpers."""
 
+from pathlib import Path
+
 from chunk_lines_model import (
     REVIEW_PDF_RASTER_DPI,
+    TranscriptionPaths,
     clamp_box_2d_to_pixels,
     line_confidence_label,
     line_notes,
     normalized_center_y_for_line,
+    resolve_chunk_pdf_dir,
+    resolve_transcription_paths_for_chunk,
 )
 
 
@@ -49,3 +54,34 @@ def test_line_confidence_label_normalizes_and_validates():
 def test_line_notes_defaults_to_empty_string():
     assert line_notes({}) == ''
     assert line_notes({'notes': 'hard glyph'}) == 'hard glyph'
+
+
+def test_resolve_chunk_pdf_dir_default_is_chunk_pdfs_under_working(tmp_path: Path):
+    wd = tmp_path / 'proj'
+    wd.mkdir()
+    assert resolve_chunk_pdf_dir(wd, None) == wd.resolve() / 'chunk-pdfs'
+
+
+def test_resolve_chunk_pdf_dir_relative_under_working(tmp_path: Path):
+    wd = tmp_path / 'proj'
+    wd.mkdir()
+    ext = tmp_path / 'external'
+    ext.mkdir()
+    assert resolve_chunk_pdf_dir(wd, Path('../external')) == ext.resolve()
+
+
+def test_resolve_transcription_paths_uses_chunk_pdf_dir(tmp_path: Path):
+    wd = tmp_path / 'w'
+    chunks = tmp_path / 'c'
+    trans = wd / 'transcriptions'
+    wd.mkdir()
+    chunks.mkdir()
+    trans.mkdir(parents=True)
+    (chunks / 'x.pdf').write_bytes(b'%PDF-1.4')
+    (trans / 'x_raw.json').write_text('{"lines":[]}', encoding='utf-8')
+    r = resolve_transcription_paths_for_chunk(
+        wd, 'x.pdf', None, chunk_pdf_dir=chunks
+    )
+    assert isinstance(r, TranscriptionPaths)
+    assert r.chunk_path == chunks / 'x.pdf'
+    assert r.raw_path == trans / 'x_raw.json'

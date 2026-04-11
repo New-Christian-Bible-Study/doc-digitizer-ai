@@ -10,6 +10,8 @@ import pytest
 
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+STRESS_OCR_PDF = REPO_ROOT / 'stress-tests' / 'torture' / 'test-ocr.pdf'
 WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
 SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk.py'
 PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'
@@ -249,6 +251,139 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
     assert '- Prompt tokens (input): `10`' in ai_log
     assert '- Completion tokens (output): `20`' in ai_log
     assert '- Total tokens: `30`' in ai_log
+
+
+def test_main_with_chunk_dir_outside_working_dir(tmp_path: Path, monkeypatch, capsys):
+    """Chunk PDFs can live outside working-dir when --chunk-dir is set."""
+    module = load_transcribe_module()
+    working_dir = tmp_path / 'working'
+    chunk_root = tmp_path / 'chunks'
+    working_dir.mkdir(parents=True, exist_ok=True)
+    chunk_root.mkdir(parents=True, exist_ok=True)
+    prompt_path = working_dir / 'prompt.md'
+    prompt_path.write_text('prompt body', encoding='utf-8')
+    chunk_path = chunk_root / 'sample.pdf'
+    chunk_path.write_bytes(b'%PDF-1.4\n% fake pdf bytes')
+    config_path = working_dir / module.TRANSCRIBE_CONFIG_FILENAME
+    write_config(
+        config_path,
+        '{"model":"gemini/gemini-2.5-flash","temperature":0.0,'
+        '"reasoning_effort":"medium","media_resolution":"high",'
+        '"sys_instructions":"x"}',
+    )
+
+    monkeypatch.setenv('GEMINI_API_KEY', 'test-key')
+    monkeypatch.setattr(module, 'get_page_count', lambda _: 1)
+    monkeypatch.setattr(
+        module,
+        'completion',
+        lambda **kwargs: SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            '{"lines":[{"page_number":1,"text":"hello",'
+                            '"box_2d":[0,0,100,100],'
+                            '"confidence_label":"high","notes":""}],'
+                            '"confidence_score":1.0,"confidence_label":"high",'
+                            '"notes":""}'
+                        )
+                    )
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=10,
+                completion_tokens=20,
+                total_tokens=30,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT_PATH),
+            '--working-dir',
+            str(working_dir),
+            '--chunk-dir',
+            str(chunk_root),
+            '--chunk',
+            'sample.pdf',
+            '--prompt-md',
+            str(prompt_path),
+        ],
+    )
+
+    exit_code = module.main()
+    assert exit_code == 0
+    raw_json = working_dir / 'transcriptions' / 'sample_raw.json'
+    assert raw_json.is_file()
+
+
+@pytest.mark.skipif(
+    not STRESS_OCR_PDF.is_file(),
+    reason='stress-tests torture PDF missing',
+)
+def test_main_accepts_chunk_dir_stress_tests_layout(tmp_path: Path, monkeypatch):
+    """Regression: chunks under stress-tests/ with transcriptions under a separate working dir."""
+    module = load_transcribe_module()
+    working_dir = tmp_path / 'working'
+    working_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = working_dir / 'prompt.md'
+    prompt_path.write_text('prompt body', encoding='utf-8')
+    config_path = working_dir / module.TRANSCRIBE_CONFIG_FILENAME
+    write_config(
+        config_path,
+        '{"model":"gemini/gemini-2.5-flash","temperature":0.0,'
+        '"reasoning_effort":"medium","media_resolution":"high",'
+        '"sys_instructions":"x"}',
+    )
+
+    monkeypatch.setenv('GEMINI_API_KEY', 'test-key')
+    monkeypatch.setattr(module, 'get_page_count', lambda _: 1)
+    monkeypatch.setattr(
+        module,
+        'completion',
+        lambda **kwargs: SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            '{"lines":[{"page_number":1,"text":"hello",'
+                            '"box_2d":[0,0,100,100],'
+                            '"confidence_label":"high","notes":""}],'
+                            '"confidence_score":1.0,"confidence_label":"high",'
+                            '"notes":""}'
+                        )
+                    )
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=1,
+                completion_tokens=2,
+                total_tokens=3,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT_PATH),
+            '--working-dir',
+            str(working_dir),
+            '--chunk-dir',
+            str(STRESS_OCR_PDF.parent),
+            '--chunk',
+            STRESS_OCR_PDF.name,
+            '--prompt-md',
+            str(prompt_path),
+        ],
+    )
+
+    assert module.main() == 0
+    stem = STRESS_OCR_PDF.stem
+    assert (working_dir / 'transcriptions' / f'{stem}_raw.json').is_file()
 
 
 def test_schema_requires_line_notes_for_low_confidence():

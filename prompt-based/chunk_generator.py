@@ -14,11 +14,15 @@ class ChunkGenerator:
         state_file_name: str = '.chunk-state.json',
         scan_dir_name: str = 'source-pdfs',
         review_dir_name: str = 'chunk-pdfs',
+        chunk_pdf_dir: Path | None = None,
     ) -> None:
         self.working_dir = (working_dir or Path.cwd()).resolve()
         self.state_path = self.working_dir / state_file_name
         self.scan_dir = self.working_dir / scan_dir_name
-        self.review_dir = self.working_dir / review_dir_name
+        if chunk_pdf_dir is not None:
+            self.review_dir = Path(chunk_pdf_dir).resolve()
+        else:
+            self.review_dir = self.working_dir / review_dir_name
 
     def load_state(self) -> dict:
         if not self.state_path.exists():

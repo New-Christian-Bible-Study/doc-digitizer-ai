@@ -21,6 +21,7 @@ def run_live_transcription(
     working_dir: Path,
     chunk_filename: str,
     prompt_md: Path,
+    chunk_dir: Path | None = None,
 ) -> subprocess.CompletedProcess:
     command = [
         sys.executable,
@@ -32,6 +33,8 @@ def run_live_transcription(
         '--prompt-md',
         str(prompt_md),
     ]
+    if chunk_dir is not None:
+        command.extend(['--chunk-dir', str(chunk_dir)])
     return subprocess.run(
         command,
         capture_output=True,

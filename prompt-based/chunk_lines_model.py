@@ -106,6 +106,22 @@ def list_chunk_filenames(chunk_dir: Path) -> list[str]:
     )
 
 
+def resolve_chunk_pdf_dir(working_dir: Path, chunk_dir: Path | None) -> Path:
+    """Resolve the directory that holds chunk PDFs.
+
+    If ``chunk_dir`` is ``None``, returns ``working_dir / 'chunk-pdfs'``.
+    Absolute ``chunk_dir`` is resolved as-is; relative paths join ``working_dir``
+    first (same rule as ``--raw-json`` under ``--working-dir``).
+    """
+    working_dir = working_dir.resolve()
+    if chunk_dir is None:
+        return working_dir / 'chunk-pdfs'
+    p = Path(chunk_dir)
+    if p.is_absolute():
+        return p.resolve()
+    return (working_dir / p).resolve()
+
+
 @dataclass(frozen=True)
 class TranscriptionPaths:
     """Resolved absolute paths for the chunk file and JSON; ``stem`` is chunk filename without .pdf."""
@@ -122,16 +138,16 @@ def resolve_transcription_paths_for_chunk(
     working_dir: Path,
     chunk_name: str,
     raw_json: Path | None,
+    chunk_pdf_dir: Path | None = None,
 ) -> TranscriptionPaths | str:
     working_dir = working_dir.resolve()
-    chunk_dir = working_dir / 'chunk-pdfs'
+    chunk_dir = resolve_chunk_pdf_dir(working_dir, chunk_pdf_dir)
     transcriptions_dir = working_dir / 'transcriptions'
     if not chunk_dir.is_dir():
         return (
-            f'Expected a chunk-pdfs directory at {chunk_dir}. '
-            '--working-dir should be the project/work folder that contains '
-            'chunk-pdfs/ (and usually transcriptions/), same as '
-            'transcribe-chunk.py.'
+            f'Expected a chunk PDF directory at {chunk_dir}. '
+            'Use --chunk-dir or ensure working-dir contains chunk-pdfs/, '
+            'same as transcribe-chunk.py.'
         )
 
     chunk_name = chunk_name.strip()
@@ -477,12 +493,14 @@ class ChunkLinesSession:
         working_dir: Path,
         chunk_name: str,
         raw_json_cli: Path | None,
+        chunk_pdf_dir: Path | None = None,
     ) -> str | None:
         """Load chunk file + JSON into this session. Returns an error message, or ``None`` on success."""
         resolved = resolve_transcription_paths_for_chunk(
             working_dir,
             chunk_name,
             raw_json_cli,
+            chunk_pdf_dir,
         )
         if isinstance(resolved, str):
             return resolved

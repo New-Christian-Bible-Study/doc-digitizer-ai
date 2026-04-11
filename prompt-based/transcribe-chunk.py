@@ -17,7 +17,12 @@ from litellm import completion
 from pypdf import PdfReader
 
 from chunk_generator import ChunkGenerator
-from chunk_lines_model import list_chunk_filenames, load_page_images, snap_box_2d_to_ink
+from chunk_lines_model import (
+    list_chunk_filenames,
+    load_page_images,
+    resolve_chunk_pdf_dir,
+    snap_box_2d_to_ink,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SCHEMA_PATH = SCRIPT_DIR / 'transcription.schema.json'
@@ -51,12 +56,11 @@ def strip_json_code_fence(content: str) -> str:
     return text
 
 
-def resolve_chunk(working_dir: Path, chunk_filename: str) -> Path:
-    chunk_dir = working_dir / 'chunk-pdfs'
-    if not chunk_dir.exists():
+def resolve_chunk(chunk_pdf_dir: Path, chunk_filename: str) -> Path:
+    if not chunk_pdf_dir.is_dir():
         raise ValueError(
-            f'Missing directory: {chunk_dir}. '
-            'Create chunk-pdfs and place a chunk file in it.'
+            f'Missing chunk PDF directory: {chunk_pdf_dir}. '
+            'Create it and place chunk files there, or pass --chunk-dir.'
         )
 
     filename = chunk_filename.strip()
@@ -67,7 +71,7 @@ def resolve_chunk(working_dir: Path, chunk_filename: str) -> Path:
     if not filename.lower().endswith('.pdf'):
         raise ValueError("Chunk filename must end with '.pdf'.")
 
-    chunk_path = chunk_dir / filename
+    chunk_path = chunk_pdf_dir / filename
     if not chunk_path.exists():
         raise ValueError(f'Chunk not found: {chunk_path}')
 
@@ -103,9 +107,8 @@ def prompt_select_filename(label: str, default: str, options: list[str]) -> str:
     return selected
 
 
-def resolve_chunk_filename(working_dir: Path) -> str:
-    chunk_dir = working_dir / 'chunk-pdfs'
-    filenames = list_chunk_filenames(chunk_dir)
+def resolve_chunk_filename(working_dir: Path, chunk_pdf_dir: Path) -> str:
+    filenames = list_chunk_filenames(chunk_pdf_dir)
 
     state = {}
     try:
@@ -122,7 +125,7 @@ def resolve_chunk_filename(working_dir: Path) -> str:
 
     if not filenames:
         print(
-            f'No PDF files found in {chunk_dir}. '
+            f'No PDF files found in {chunk_pdf_dir}. '
             'Falling back to manual filename entry.'
         )
 
@@ -212,7 +215,7 @@ def parse_args() -> argparse.Namespace:
         '--chunk',
         required=False,
         default=None,
-        help='Filename from chunk-pdfs/ (filename only).',
+        help='Chunk PDF filename only (resolved under --chunk-dir, default working-dir/chunk-pdfs).',
     )
     parser.add_argument(
         '--prompt-md',
@@ -227,9 +230,21 @@ def parse_args() -> argparse.Namespace:
         help='Optional working directory containing chunk-pdfs/ and transcriptions/.',
     )
     parser.add_argument(
+        '--chunk-dir',
+        type=Path,
+        default=None,
+        help=(
+            'Directory containing chunk PDFs (default: working-dir/chunk-pdfs). '
+            'Relative paths are resolved under working-dir.'
+        ),
+    )
+    parser.add_argument(
         '--all',
         action='store_true',
-        help='Transcribe every chunk in chunk-pdfs/ without prompting (non-interactive).',
+        help=(
+            'Transcribe every .pdf in the chunk directory without prompting '
+            '(non-interactive).'
+        ),
     )
     args = parser.parse_args()
     if args.all and args.chunk is not None:
@@ -528,10 +543,11 @@ def transcribe_single_chunk(
     config_path: Path,
     schema: dict,
     chunk_filename: str,
+    chunk_pdf_dir: Path,
 ) -> int:
     run_started_at = datetime.now().strftime('%Y-%m-%d %H:%M')
     try:
-        chunk_path = resolve_chunk(working_dir, chunk_filename)
+        chunk_path = resolve_chunk(chunk_pdf_dir, chunk_filename)
     except ValueError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 2
@@ -670,6 +686,7 @@ def transcribe_single_chunk(
 def main() -> int:
     args = parse_args()
     working_dir = args.working_dir.resolve()
+    chunk_pdf_dir = resolve_chunk_pdf_dir(working_dir, args.chunk_dir)
     schema = load_schema()
 
     try:
@@ -700,11 +717,10 @@ def main() -> int:
         return 2
 
     if args.all:
-        chunk_dir = working_dir / 'chunk-pdfs'
-        chunk_filenames = list_chunk_filenames(chunk_dir)
+        chunk_filenames = list_chunk_filenames(chunk_pdf_dir)
         if not chunk_filenames:
             print(
-                f'Error: No PDF files in {chunk_dir}. Nothing to transcribe.',
+                f'Error: No PDF files in {chunk_pdf_dir}. Nothing to transcribe.',
                 file=sys.stderr,
             )
             return 2
@@ -718,6 +734,7 @@ def main() -> int:
                 config_path,
                 schema,
                 chunk_filename,
+                chunk_pdf_dir,
             )
             if rc != 0:
                 return rc
@@ -725,7 +742,7 @@ def main() -> int:
 
     chunk_filename = args.chunk
     if chunk_filename is None:
-        chunk_filename = resolve_chunk_filename(working_dir)
+        chunk_filename = resolve_chunk_filename(working_dir, chunk_pdf_dir)
 
     return transcribe_single_chunk(
         working_dir,
@@ -734,6 +751,7 @@ def main() -> int:
         config_path,
         schema,
         chunk_filename,
+        chunk_pdf_dir,
     )
 
 

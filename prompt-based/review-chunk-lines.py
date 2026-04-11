@@ -39,6 +39,7 @@ from chunk_lines_model import (
     line_notes,
     list_chunk_filenames,
     normalized_center_y_for_line,
+    resolve_chunk_pdf_dir,
 )
 
 
@@ -72,7 +73,16 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path('.'),
         help=(
             'Same as transcribe-chunk.py: directory containing '
-            'chunk-pdfs/ and transcriptions/'
+            'chunk-pdfs/ (or use --chunk-dir) and transcriptions/'
+        ),
+    )
+    parser.add_argument(
+        '--chunk-dir',
+        type=Path,
+        default=None,
+        help=(
+            'Directory containing chunk PDFs (default: working-dir/chunk-pdfs). '
+            'Relative paths are resolved under working-dir.'
         ),
     )
     parser.add_argument(
@@ -93,11 +103,13 @@ class ReviewMainWindow(QMainWindow):
     def __init__(
         self,
         working_dir: Path,
+        chunk_pdf_dir: Path,
         chunk_filenames: list[str],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._working_dir = working_dir.resolve()
+        self._chunk_pdf_dir = chunk_pdf_dir.resolve()
         self._chunk_filenames = chunk_filenames
         self._line_edits: list[FocusLineEdit] = []
         self._line_badges: list[QLabel] = []
@@ -236,6 +248,10 @@ class ReviewMainWindow(QMainWindow):
     @property
     def working_dir(self) -> Path:
         return self._working_dir
+
+    @property
+    def chunk_pdf_dir(self) -> Path:
+        return self._chunk_pdf_dir
 
     @property
     def chunk_filenames(self) -> list[str]:
@@ -581,6 +597,7 @@ class ReviewChunkLinesController:
             self._view.working_dir,
             chunk_name,
             self._raw_json_cli,
+            self._view.chunk_pdf_dir,
         )
         if err is not None:
             if show_error:
@@ -683,19 +700,19 @@ class ReviewChunkLinesController:
 def main() -> int:
     cli = parse_cli_args()
     working_dir = cli.working_dir.resolve()
-    chunk_dir = working_dir / 'chunk-pdfs'
-    if not chunk_dir.is_dir():
+    chunk_pdf_dir = resolve_chunk_pdf_dir(working_dir, cli.chunk_dir)
+    if not chunk_pdf_dir.is_dir():
         print(
-            f'Expected a chunk-pdfs directory at {chunk_dir}. '
-            '--working-dir should be the folder that contains chunk-pdfs/ '
+            f'Expected a chunk PDF directory at {chunk_pdf_dir}. '
+            'Use --chunk-dir or ensure working-dir contains chunk-pdfs/ '
             'and transcriptions/.',
             file=sys.stderr,
         )
         return 1
 
-    pdf_names = list_chunk_filenames(chunk_dir)
+    pdf_names = list_chunk_filenames(chunk_pdf_dir)
     if not pdf_names:
-        print(f'No .pdf files found in {chunk_dir}', file=sys.stderr)
+        print(f'No .pdf files found in {chunk_pdf_dir}', file=sys.stderr)
         return 1
 
     app = QApplication(sys.argv)
@@ -705,7 +722,7 @@ def main() -> int:
         app.setWindowIcon(_ic)
 
     session = ChunkLinesSession()
-    win = ReviewMainWindow(working_dir, pdf_names)
+    win = ReviewMainWindow(working_dir, chunk_pdf_dir, pdf_names)
     ctrl = ReviewChunkLinesController(session, win, raw_json_cli=cli.raw_json)
     win.show()
     ctrl.try_initial_chunk()

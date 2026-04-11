@@ -7,6 +7,7 @@ from pathlib import Path
 import questionary
 
 from chunk_generator import ChunkGenerator
+from chunk_lines_model import resolve_chunk_pdf_dir
 
 
 def prompt_with_default(label: str, default: str) -> str:
@@ -75,9 +76,22 @@ def main() -> int:
         default='.',
         help='Working directory that contains source-pdfs/ and chunk-pdfs/.',
     )
+    parser.add_argument(
+        '--chunk-dir',
+        type=Path,
+        default=None,
+        help=(
+            'Directory for extracted chunk PDFs (default: working-dir/chunk-pdfs). '
+            'Relative paths are resolved under working-dir.'
+        ),
+    )
     args = parser.parse_args()
 
-    generator = ChunkGenerator(working_dir=Path(args.working_dir))
+    working_path = Path(args.working_dir).resolve()
+    chunk_pdf_kw = {}
+    if args.chunk_dir is not None:
+        chunk_pdf_kw['chunk_pdf_dir'] = resolve_chunk_pdf_dir(working_path, args.chunk_dir)
+    generator = ChunkGenerator(working_dir=working_path, **chunk_pdf_kw)
 
     try:
         state = generator.load_state()

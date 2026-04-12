@@ -164,9 +164,22 @@ python prompt-based/review-chunk-lines.py --working-dir prompt-based/tests/test-
 - If `_final.json` already exists for that stem, it is loaded so you can resume editing.
 - **Quit:** Close the window, or press Ctrl-C in the terminal (the app installs a handler so this works with Qt). If the process is stuck, from another terminal: `pkill -f review-chunk-lines.py` or `kill <pid>` (`kill -9` only as a last resort).
 
+## Transcription JSON to AsciiDoc
+
+To turn a Pass 1 `transcriptions/<stem>_raw.json` or reviewed `transcriptions/<stem>_final.json` into a `.adoc` file, run `transcription-json-to-adoc.py`. It reads the `lines` array and writes each line’s `text` in order, separated by newlines, next to the JSON file (e.g. `chunk_001-003_raw.json` → `chunk_001-003_raw.adoc`).
+
+By default the JSON is validated against `transcription.schema.json` before anything is written. Use `--skip-schema-validation` only for debugging or hand-edited JSON.
+
+```bash
+python prompt-based/transcription-json-to-adoc.py \
+  prompt-based/tests/test-1/transcriptions/test-a_001-003_raw.json
+```
+
+With a single input file you may pass `-o` / `--output` to choose the `.adoc` path.
+
 ## Build PDFs from transcriptions (AsciiDoc)
 
-`transcribe-chunk.py` does not emit `.adoc` files; it writes `*_raw.json`. You can later stitch corrected `*_final.json` content into AsciiDoc for publishing. This script is for when you already have `.adoc` sources under `transcriptions/`.
+`transcribe-chunk.py` does not emit `.adoc` files; it writes `*_raw.json`. You can convert JSON to `.adoc` with `transcription-json-to-adoc.py` (above), stitch or edit further, or maintain `.adoc` sources under `transcriptions/` by hand.
 
 `build-transcribed-chunk-pdfs.py` walks `--working-dir`, finds every directory named `transcriptions`, and runs [Asciidoctor PDF](https://asciidoctor.org/docs/asciidoctor-pdf/) on each `.adoc` file in that directory. It writes `<stem>-transcription.pdf` beside `<stem>.adoc` (for example `chunk-1.adoc` to `chunk-1-transcription.pdf`).
 

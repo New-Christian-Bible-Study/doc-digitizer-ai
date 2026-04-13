@@ -12,6 +12,7 @@ from pathlib import Path
 
 import jsonschema
 import questionary
+import structlog
 from jsonargparse import ArgumentParser as JsonArgParser
 from litellm import completion
 from pypdf import PdfReader
@@ -30,6 +31,32 @@ TRANSCRIBE_CONFIG_FILENAME = 'transcribe.config.json'
 VALID_REASONING_EFFORTS = ('none', 'disable', 'low', 'medium', 'high', 'minimal')
 VALID_MEDIA_RESOLUTIONS = ('low', 'medium', 'high', 'ultra_high', 'auto')
 DEFAULT_TIMEOUT_SECONDS = 900.0
+RUNTIME_LOG_FILENAME = 'transcribe-runtime.jsonl'
+RUNTIME_LOG_JSON_KEY_ORDER = (
+    'run_started_at',
+    'event',
+    'chunk_file',
+    'total_pages',
+    'confidence_label',
+    'confidence_score',
+    'total_inference_time_minutes',
+    'average_time_per_page_seconds',
+    'prompt_tokens',
+    'completion_tokens',
+    'total_tokens',
+)
+
+
+def reorder_runtime_log_event_dict(_logger, _method_name, event_dict):
+    """Put known runtime-log keys first; append any extras (e.g. future structlog fields)."""
+    event_dict.pop('logged_at', None)
+    ordered = {key: event_dict[key] for key in RUNTIME_LOG_JSON_KEY_ORDER if key in event_dict}
+    for key, value in event_dict.items():
+        if key not in ordered:
+            ordered[key] = value
+    event_dict.clear()
+    event_dict.update(ordered)
+    return event_dict
 
 
 def load_schema() -> dict:
@@ -441,45 +468,70 @@ def format_token_log_value(value: object) -> str:
         return str(value)
 
 
-def build_ai_log_markdown(
+def log_runtime_event(
     chunk_filename: str,
     run_started_at: str,
     total_pages: int,
     inference_time_seconds: object,
     average_time_per_page_seconds: object,
+    prompt_tokens: object,
+    completion_tokens: object,
+    total_tokens: object,
+    confidence_score: object,
+    confidence_label: object,
+) -> Path:
+    runtime_log_path = SCRIPT_DIR / RUNTIME_LOG_FILENAME
+    runtime_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with runtime_log_path.open('a', encoding='utf-8') as runtime_log_file:
+        logger = structlog.wrap_logger(
+            structlog.WriteLogger(runtime_log_file),
+            processors=[
+                reorder_runtime_log_event_dict,
+                structlog.processors.JSONRenderer(sort_keys=False),
+            ],
+        )
+        logger.info(
+            'transcription_run',
+            run_started_at=run_started_at,
+            chunk_file=chunk_filename,
+            total_pages=total_pages,
+            confidence_label=confidence_label,
+            confidence_score=confidence_score,
+            total_inference_time_minutes=(
+                None
+                if inference_time_seconds is None
+                else round(float(inference_time_seconds) / 60.0, 2)
+            ),
+            average_time_per_page_seconds=(
+                None
+                if average_time_per_page_seconds is None
+                else round(float(average_time_per_page_seconds), 2)
+            ),
+            prompt_tokens=format_token_log_value(prompt_tokens),
+            completion_tokens=format_token_log_value(completion_tokens),
+            total_tokens=format_token_log_value(total_tokens),
+        )
+    return runtime_log_path
+
+
+def build_ai_summary_markdown(
+    chunk_filename: str,
+    total_pages: int,
     transcribe_config_text: str,
     confidence_score: object,
     confidence_label: object,
     notes: object,
     prompt_text: str,
-    prompt_tokens: object = None,
-    completion_tokens: object = None,
-    total_tokens: object = None,
 ) -> str:
     confidence_score_text = '' if confidence_score is None else str(confidence_score)
     confidence_label_text = '' if confidence_label is None else str(confidence_label)
     notes_text = '' if notes is None else str(notes)
-    inference_time_text = (
-        ''
-        if inference_time_seconds is None
-        else f'{float(inference_time_seconds) / 60.0:.2f}'
-    )
-    average_time_per_page_text = (
-        ''
-        if average_time_per_page_seconds is None
-        else f'{float(average_time_per_page_seconds):.2f}'
-    )
 
     return (
-        '# AI transcription run log\n\n'
+        '# AI transcription summary\n\n'
         f'- Chunk file: `{chunk_filename}`\n'
-        f'- Run started at: `{run_started_at}`\n'
         f'- Total pages: `{total_pages}`\n'
-        f'- Total inference time (minutes): `{inference_time_text}`\n'
-        f'- Average time per page (seconds): `{average_time_per_page_text}`\n'
-        f'- Prompt tokens (input): `{format_token_log_value(prompt_tokens)}`\n'
-        f'- Completion tokens (output): `{format_token_log_value(completion_tokens)}`\n'
-        f'- Total tokens: `{format_token_log_value(total_tokens)}`\n'
         f'- Confidence score: `{confidence_score_text}`\n'
         f'- Confidence label: `{confidence_label_text}`\n'
         f'- Notes: {notes_text}\n'
@@ -654,32 +706,39 @@ def transcribe_single_chunk(
     transcriptions_dir = working_dir / 'transcriptions'
     transcriptions_dir.mkdir(parents=True, exist_ok=True)
     output_raw_json = transcriptions_dir / f'{chunk_path.stem}_raw.json'
-    output_ai_log_md = transcriptions_dir / f'{chunk_path.stem}-ai-log.md'
+    output_ai_summary_md = transcriptions_dir / f'{chunk_path.stem}_summary.md'
     output_raw_json.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + '\n',
         encoding='utf-8',
     )
-    output_ai_log_md.write_text(
-        build_ai_log_markdown(
+    output_ai_summary_md.write_text(
+        build_ai_summary_markdown(
             chunk_filename=chunk_path.name,
-            run_started_at=run_started_at,
             total_pages=total_pages,
-            inference_time_seconds=inference_time_seconds,
-            average_time_per_page_seconds=average_time_per_page_seconds,
             transcribe_config_text=transcribe_config_text,
             confidence_score=payload['confidence_score'],
             confidence_label=payload['confidence_label'],
             notes=payload['notes'],
             prompt_text=prompt_text,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
         ),
         encoding='utf-8',
     )
+    runtime_log_path = log_runtime_event(
+        chunk_filename=chunk_path.name,
+        run_started_at=run_started_at,
+        total_pages=total_pages,
+        inference_time_seconds=inference_time_seconds,
+        average_time_per_page_seconds=average_time_per_page_seconds,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        confidence_score=payload['confidence_score'],
+        confidence_label=payload['confidence_label'],
+    )
 
     print(f'Created raw transcription JSON: {output_raw_json}')
-    print(f'Created AI log: {output_ai_log_md}')
+    print(f'Created AI summary: {output_ai_summary_md}')
+    print(f'Appended runtime log: {runtime_log_path}')
     return 0
 
 

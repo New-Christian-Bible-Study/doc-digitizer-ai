@@ -27,7 +27,7 @@ Create one dedicated working directory per work/book/manuscript and run the scri
 | --- | --- |
 | `source-pdfs/` | Source PDFs to transcribe. |
 | `chunk-pdfs/` | Chunks (PDF files) generated from page ranges in a source PDF. |
-| `transcriptions/` | Raw/final JSON transcriptions and AI run logs. Created automatically as needed. |
+| `transcriptions/` | Raw/final JSON transcriptions and AI summaries. Created automatically as needed. |
 
 ### Files
 
@@ -103,7 +103,7 @@ Default output naming:
 `transcribe-chunk.py` transcribes a file from `chunk-pdfs/` (or from **`--chunk-dir`**) into:
 
 - `transcriptions/<chunk_stem>_raw.json` — per-line text with `box_2d` coordinates (Pass 1)
-- `transcriptions/<chunk_stem>-ai-log.md`
+- `transcriptions/<chunk_stem>_summary.md`
 
 By default a Gemini model is used to do the transcription. 
 To create a Gemini API key: [Google AI Studio - Get API key](https://ai.google.dev/gemini-api/docs/api-key)
@@ -136,7 +136,8 @@ python prompt-based/transcribe-chunk.py --working-dir prompt-based/tests/test-1
 - Transcribe config is loaded from `transcribe.config.json` with this precedence:
   - `<working-dir>/transcribe.config.json`
   - `<script-dir>/transcribe.config.json` (fallback)
-- The `-ai-log.md` file includes chunk filename, run timing, confidence score/label, notes, full config JSON used (including `sys_instructions`), and the full prompt used.
+- The `_summary.md` file includes chunk filename, total pages, confidence score/label, notes, full config JSON used (including `sys_instructions`), and the full prompt used.
+- Runtime metrics (`run_started_at`, timing, token usage) are appended to `prompt-based/transcribe-runtime.jsonl`, which is ignored by git.
 
 ## Review and correct transcriptions (human pass)
 

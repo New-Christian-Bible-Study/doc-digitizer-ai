@@ -64,7 +64,7 @@ Environment:
 - Build payload with required schema keys (`transcription`, `confidence_score`, `confidence_label`, `model`; optional `notes`, `configuration`) and validate with JSON Schema.
 - Ensure output dir `transcriptions/` exists.
 - Write markdown transcription to `transcriptions/<stem>.md`.
-- Write reproducibility log to `transcriptions/<stem>-ai-log.md` including chunk PDF filename, model, configuration, confidence score, confidence label, notes, and prompt used.
+- Write summary to `transcriptions/<stem>_summary.md` including chunk PDF filename, total pages, confidence score, confidence label, notes, and prompt used.
 
 ## Testing approach
 

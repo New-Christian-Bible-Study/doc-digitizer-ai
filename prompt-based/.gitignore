@@ -1,11 +1,17 @@
 # Fixture outputs (prompt-based/tests/test-1)
+transcribe-runtime.jsonl
 tests/test-1/chunk-pdfs/*
 !tests/test-1/chunk-pdfs/.gitkeep
 tests/test-1/.chunk-state.json
 tests/test-1/transcriptions/*
 !tests/test-1/transcriptions/.gitkeep
 # Committed transcription fixtures (override transcriptions/* above)
-!tests/test-1/transcriptions/test-a_001-003-ai-log.md
+!tests/test-1/transcriptions/test-a_001-003_summary.md
 !tests/test-1/transcriptions/test-a_001-003_raw.json
-!tests/test-1/transcriptions/test-a_004-005-ai-log.md
+!tests/test-1/transcriptions/test-a_004-005_summary.md
 !tests/test-1/transcriptions/test-a_004-005_raw.json
+
+# Live outputs (prompt-based/tests/test-torture-ocr)
+tests/test-torture-ocr/transcriptions/*
+!tests/test-torture-ocr/transcriptions/.gitkeep
+tests/test-torture-ocr/cer-report.txt

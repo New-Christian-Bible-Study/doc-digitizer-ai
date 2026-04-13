@@ -245,12 +245,13 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
 
     assert exit_code == 0
     assert f'Using prompt file: {prompt_path.resolve()}' in stdout
-    ai_log = (working_dir / 'transcriptions' / 'sample-ai-log.md').read_text(
+    ai_summary = (working_dir / 'transcriptions' / 'sample_summary.md').read_text(
         encoding='utf-8'
     )
-    assert '- Prompt tokens (input): `10`' in ai_log
-    assert '- Completion tokens (output): `20`' in ai_log
-    assert '- Total tokens: `30`' in ai_log
+    assert '# AI transcription summary' in ai_summary
+    assert '- Prompt tokens (input): `' not in ai_summary
+    assert '- Completion tokens (output): `' not in ai_summary
+    assert '- Total tokens: `' not in ai_summary
 
 
 def test_main_with_chunk_dir_outside_working_dir(tmp_path: Path, monkeypatch, capsys):

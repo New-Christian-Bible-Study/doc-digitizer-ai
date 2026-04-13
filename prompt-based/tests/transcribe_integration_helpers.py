@@ -44,19 +44,20 @@ def run_live_transcription(
     )
 
 
-def assert_common_ai_log_fields(ai_log_text: str, chunk_filename: str):
-    assert f'Chunk file: `{chunk_filename}`' in ai_log_text
-    assert '- Model: `' not in ai_log_text
-    assert '- Configuration: `' not in ai_log_text
-    assert '## Transcribe config used' in ai_log_text
-    assert '"model": "gemini/gemini-3.1-pro-preview"' in ai_log_text
-    assert '"temperature": 1.0' in ai_log_text
-    assert '"reasoning_effort": "medium"' in ai_log_text
-    assert '"media_resolution": "high"' in ai_log_text
-    assert '"sys_instructions":' in ai_log_text
-    assert '- Confidence score: `' in ai_log_text
-    assert '- Confidence label: `' in ai_log_text
-    assert '- Prompt tokens (input): `' in ai_log_text
-    assert '- Completion tokens (output): `' in ai_log_text
-    assert '- Total tokens: `' in ai_log_text
-    assert '## Prompt used' in ai_log_text
+def assert_common_ai_summary_fields(ai_summary_text: str, chunk_filename: str):
+    assert '# AI transcription summary' in ai_summary_text
+    assert f'Chunk file: `{chunk_filename}`' in ai_summary_text
+    assert '- Model: `' not in ai_summary_text
+    assert '- Configuration: `' not in ai_summary_text
+    assert '- Prompt tokens (input): `' not in ai_summary_text
+    assert '- Completion tokens (output): `' not in ai_summary_text
+    assert '- Total tokens: `' not in ai_summary_text
+    assert '## Transcribe config used' in ai_summary_text
+    assert '"model": "gemini/gemini-3.1-pro-preview"' in ai_summary_text
+    assert '"temperature": 1.0' in ai_summary_text
+    assert '"reasoning_effort": "medium"' in ai_summary_text
+    assert '"media_resolution": "high"' in ai_summary_text
+    assert '"sys_instructions":' in ai_summary_text
+    assert '- Confidence score: `' in ai_summary_text
+    assert '- Confidence label: `' in ai_summary_text
+    assert '## Prompt used' in ai_summary_text

@@ -1,14 +1,8 @@
-# AI transcription run log
+# AI transcription summary
 
 - Chunk file: `test-a_001-003.pdf`
-- Run started at: `2026-04-09 16:22`
 - Total pages: `3`
-- Total inference time (minutes): `0.30`
-- Average time per page (seconds): `6.05`
-- Prompt tokens (input): `4106`
-- Completion tokens (output): `2084`
-- Total tokens: `6190`
-- Confidence score: `0.99`
+- Confidence score: `1.0`
 - Confidence label: `high`
 - Notes: 
 ## Transcribe config used

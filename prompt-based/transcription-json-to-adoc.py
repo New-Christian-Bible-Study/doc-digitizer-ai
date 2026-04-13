@@ -40,6 +40,10 @@ def strip_transcription_inline_markup(text: str) -> str:
 def strip_asciidoc_block_from_line(line: str) -> str | None:
     '''Return plain text for one line, or None to drop the line entirely.
 
+    Used when comparing line-joined JSON to pandoc plain ground truth: the
+    torture CER test does not render hypothesis text through AsciiDoc3, so
+    markers the model copies from the page must be removed heuristically here.
+
     Removes AsciiDoc-only constructs so transcription text aligns with pandoc
     plain ground truth: document/section heading prefixes (``=`` … ``======``),
     role-only lines (``[.tiny]``), attribute lines (``:foo:``), preprocessor
@@ -76,6 +80,12 @@ def lines_to_adoc_body(
     strip_inline_markup: bool = False,
     strip_asciidoc_block: bool = False,
 ) -> str:
+    '''Join ``lines[].text`` in order. Optional stripping targets CER-style plain text.
+
+    For torture OCR integration tests both strip flags are True so ``*_raw.txt``
+    matches ``ground-truth.txt`` shape before ``normalize_for_cer``. Default
+    (both False) preserves model output for normal .adoc export.
+    '''
     lines = payload.get('lines')
     if not isinstance(lines, list):
         return ''

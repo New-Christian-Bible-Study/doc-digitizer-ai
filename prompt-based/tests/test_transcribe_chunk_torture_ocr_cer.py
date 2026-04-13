@@ -38,6 +38,8 @@ _MAX_DIFF_LINES = 5000
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = STRATEGY_ROOT.parent
+# Shared generators (gen-*.py, theme yml) sit here too; only subdirs that
+# contain CHUNK_FILENAME count as languages—no hardcoded language list.
 TORTURE_ROOT = REPO_ROOT / 'stress-tests' / 'torture'
 CHUNK_FILENAME = 'test-ocr.pdf'
 
@@ -68,9 +70,11 @@ def _torture_lang_params_for_parametrize():
     return discovered
 
 
+# Built at import time so wrong TORTURE_OCR_LANG fails during collection, not mid-run.
 TORTURE_LANG_PARAMS = _torture_lang_params_for_parametrize()
 _RAW_JSON_NAME = 'test-ocr_raw.json'
 _COMPUTE_CER_PATH = REPO_ROOT / 'stress-tests' / 'compute-cer.py'
+# Script lives next to tests/ but is not a Python package; importlib matches compute-cer.
 _TRANSCRIPTION_JSON_TO_ADOC_PATH = STRATEGY_ROOT / 'transcription-json-to-adoc.py'
 
 # Match compute-cer.py default (strip-html-emphasis).
@@ -127,6 +131,10 @@ def _hypothesis_plain_from_payload(payload: dict) -> str:
 
 def _normalized_truth_and_hypothesis(hypothesis_plain: str, truth_raw: str) -> tuple[str, str]:
     '''Return (reference, hypothesis) both passed through ``normalize_for_cer``.
+
+    Unlike ``compute-cer.py`` on a .adoc file, we do not run AsciiDoc3/html2text
+    on the hypothesis: Pass 1 is JSON lines, not an AsciiDoc document. Stripping
+    in ``transcription-json-to-adoc`` approximates plain text like ground-truth.txt.
 
     ``hypothesis_plain`` is the line-joined hypothesis; the returned second
     value is that same hypothesis after normalization, ready for Levenshtein.
@@ -263,6 +271,7 @@ def test_live_integration_torture_ocr_cer_within_cutoff(torture_lang):
     torture_dir = TORTURE_ROOT / torture_lang
     chunk_pdf_path = torture_dir / CHUNK_FILENAME
     ground_truth_path = torture_dir / 'ground-truth.txt'
+    # Mirror torture/<lang>/ so multiple languages' transcriptions never clobber.
     working_dir = STRATEGY_ROOT / 'tests' / 'test-torture-ocr' / torture_lang
     raw_json_path = working_dir / 'transcriptions' / _RAW_JSON_NAME
     plain_text_path = raw_json_path.with_suffix('.txt')

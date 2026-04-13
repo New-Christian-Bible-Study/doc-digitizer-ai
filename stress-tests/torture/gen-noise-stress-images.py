@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-'''Raster stress strips for OCR PDF (gradient, vignette shading, speckle).'''
+'''Raster stress strips for OCR PDF (gradient, vignette shading, speckle).
+
+One ``--lang-dir`` per torture language (e.g. ``english/``, ``italian/``). PNGs
+must match the prose baked into that folder's ``test-ocr.adoc`` (PDF branch of
+section 4); see ``noise-image-text.json`` for the same strings in a machine-
+readable form. Shared tooling lives next to this file; only ``noise-assets/`` is
+language-specific.
+'''
 
 import argparse
 import json
@@ -37,6 +44,9 @@ def parse_accent_stress_line(adoc_path: Path) -> str:
 
 
 def load_noise_config(lang_dir: Path) -> dict:
+    # Accent line is duplicated on purpose: the .adoc attribute drives the page,
+    # JSON holds the same string so we fail fast if an editor updates one file
+    # and forgets the other (the raster text must match OCR expectations).
     adoc_path = lang_dir / 'test-ocr.adoc'
     json_path = lang_dir / 'noise-image-text.json'
     if not json_path.is_file():

@@ -112,12 +112,17 @@ def _hypothesis_plain_from_payload(payload: dict) -> str:
     '''Build the hypothesis string from Pass 1 JSON before CER normalization.
 
     **hypothesis_plain** is the model transcription as a single document: each
-    line's ``text`` joined with newlines, with inline ``**bold**`` / ``*italic*``
-    markers stripped so CER is not penalized for formatting. It is not yet run
-    through ``normalize_for_cer`` (whitespace, smart quotes, heading markup, etc.).
+    line's ``text`` joined with newlines, with AsciiDoc block markup (heading
+    ``=`` prefixes, role lines, etc.) removed and inline ``**bold**`` /
+    ``*italic*`` markers stripped so the ``*_raw.txt`` side matches plain
+    ``ground-truth.txt`` before ``normalize_for_cer``.
     '''
     mod = _load_transcription_json_to_adoc_module()
-    return mod.lines_to_adoc_body(payload, strip_inline_markup=True)
+    return mod.lines_to_adoc_body(
+        payload,
+        strip_inline_markup=True,
+        strip_asciidoc_block=True,
+    )
 
 
 def _normalized_truth_and_hypothesis(hypothesis_plain: str, truth_raw: str) -> tuple[str, str]:
@@ -196,7 +201,8 @@ def _build_cer_report(
         'Normalization',
         '---------------',
         'Same as stress-tests/compute-cer.py: normalize_for_cer(..., strip_html_emphasis=True).',
-        'Hypothesis text: lines_to_adoc_body(..., strip_inline_markup=True) from transcription-json-to-adoc.py.',
+        'Hypothesis text: lines_to_adoc_body(..., strip_inline_markup=True, '
+        'strip_asciidoc_block=True) from transcription-json-to-adoc.py.',
         'CER = Levenshtein distance / len(ground truth normalized).',
         '',
         'CER summary',

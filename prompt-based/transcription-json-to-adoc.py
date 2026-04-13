@@ -37,7 +37,45 @@ def strip_transcription_inline_markup(text: str) -> str:
     return s
 
 
-def lines_to_adoc_body(payload: dict, *, strip_inline_markup: bool = False) -> str:
+def strip_asciidoc_block_from_line(line: str) -> str | None:
+    '''Return plain text for one line, or None to drop the line entirely.
+
+    Removes AsciiDoc-only constructs so transcription text aligns with pandoc
+    plain ground truth: document/section heading prefixes (``=`` … ``======``),
+    role-only lines (``[.tiny]``), attribute lines (``:foo:``), preprocessor
+    conditionals (``ifeval::`` / ``endif::``), and full-line comments (``//``).
+    '''
+    s = line.strip()
+    if not s:
+        return ''
+    if s.startswith('//'):
+        return None
+    if re.match(r'^\[\.[^\]]+\]\s*$', s):
+        return None
+    if re.match(r'^:[-a-zA-Z0-9_]+:', s):
+        return None
+    if (
+        s.startswith('ifeval::')
+        or s.startswith('endif::')
+        or s.startswith('ifdef::')
+        or s.startswith('ifndef::')
+    ):
+        return None
+    m = re.match(r'^\s*(=+)(?:\s+(.*))?$', s)
+    if m:
+        rest = m.group(2)
+        if rest:
+            return rest
+        return None
+    return line.rstrip('\n')
+
+
+def lines_to_adoc_body(
+    payload: dict,
+    *,
+    strip_inline_markup: bool = False,
+    strip_asciidoc_block: bool = False,
+) -> str:
     lines = payload.get('lines')
     if not isinstance(lines, list):
         return ''
@@ -47,6 +85,11 @@ def lines_to_adoc_body(payload: dict, *, strip_inline_markup: bool = False) -> s
             t = item.get('text', '')
             if not isinstance(t, str):
                 t = ''
+            if strip_asciidoc_block:
+                block_stripped = strip_asciidoc_block_from_line(t)
+                if block_stripped is None:
+                    continue
+                t = block_stripped
             if strip_inline_markup:
                 t = strip_transcription_inline_markup(t)
             texts.append(t)
@@ -89,8 +132,10 @@ def main() -> int:
         '--strip-inline-markup',
         action='store_true',
         help=(
-            'Strip common inline **bold**, *italic*, __underline__, _italic_, and '
-            '`code` markers from each line before writing (useful for plain CER).'
+            'Strip AsciiDoc block markup (heading = prefixes, [.role] lines, '
+            'attributes, ifeval/endif, // comments) and inline **bold**, '
+            '*italic*, __underline__, _italic_, and `code` from each line before '
+            'writing (for plain-text / CER alignment with pandoc ground truth).'
         ),
     )
     args = parser.parse_args()
@@ -136,6 +181,7 @@ def main() -> int:
         body = lines_to_adoc_body(
             payload,
             strip_inline_markup=args.strip_inline_markup,
+            strip_asciidoc_block=args.strip_inline_markup,
         )
         if args.output is not None:
             out_path = args.output.resolve()

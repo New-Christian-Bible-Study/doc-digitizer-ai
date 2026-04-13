@@ -1,0 +1,7 @@
+{
+  "accent_stress_line": "The five boxing wizards jump quickly. 0123456789 Il1O0 oO",
+  "uniform": "Uniform mid-grey panel (~#A8A8A8). OCR should read this line despite a flat non-white backing similar to tinted copier paper. ",
+  "gradient": "Subtle vertical gradient from ~#909090 to ~#C8C8C8. Tests thresholding when background luminance drifts smoothly across the line. ",
+  "shading": "Low-frequency shading and vignette mimic uneven platen lighting or mild drum wear; strokes should still decode cleanly. ",
+  "speckle": "High-frequency speckle and salt-and-pepper noise mimic print soot, dust, and coarse halftone; text must separate from background grain. "
+}

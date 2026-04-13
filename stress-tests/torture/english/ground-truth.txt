@@ -6,30 +6,26 @@ This is 4pt text. It is designed to test the resolution limits of the
 OCR engine and the model’s ability to distinguish 'e' from 'o' at
 microscopic scales.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 This is 6pt text. This is common in legal disclaimers and should be
 readable by high-quality models, but often fails on standard
 Tesseract-style engines.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 2. Contrast & Luminance Test
 
 This text is rendered in #E0E0E0 (Light Grey). It tests the engine’s
 thresholding capabilities and sensitivity to low-contrast edges.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 This text is rendered in #F2F2F2. To the human eye on a standard
 monitor, it is nearly invisible. This is a "hard-fail" test for most
 vision models.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 3. Spatial & Layout Stress
 
@@ -37,8 +33,7 @@ This paragraph uses a line height of 0.7. By reducing the vertical
 buffer between lines, we test if the OCR can maintain baseline integrity
 without merging characters from the line above or below.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 4. Background Noise Simulation
 
@@ -47,31 +42,27 @@ straße, łódź, ångström; São José.
 Uniform mid-grey panel (~#A8A8A8). OCR should read this line despite a
 flat non-white backing similar to tinted copier paper.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 4.2 Subtle gradient
 
 Subtle vertical gradient from ~#909090 to ~#C8C8C8. Tests thresholding
 when background luminance drifts smoothly across the line.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 4.3 Uneven shading
 
 Low-frequency shading and vignette mimic uneven platen lighting or mild
 drum wear; strokes should still decode cleanly.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 4.4 Printed noise and speckle
 
 High-frequency speckle and salt-and-pepper noise mimic print soot, dust,
 and coarse halftone; text must separate from background grain.
 
-Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich
-straße, łódź, ångström; São José.
+The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
-Last updated 2026-04-11 11:25:18 -0500
+Last updated 2026-04-13 14:38:12 -0500

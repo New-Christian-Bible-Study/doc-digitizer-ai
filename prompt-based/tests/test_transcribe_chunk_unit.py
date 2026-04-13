@@ -11,7 +11,7 @@ import pytest
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[2]
-STRESS_OCR_PDF = REPO_ROOT / 'stress-tests' / 'torture' / 'test-ocr.pdf'
+STRESS_OCR_PDF = REPO_ROOT / 'stress-tests' / 'torture' / 'english' / 'test-ocr.pdf'
 WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
 SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk.py'
 PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'

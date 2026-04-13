@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 '''Raster stress strips for OCR PDF (gradient, vignette shading, speckle).'''
 
+import argparse
+import json
 import math
 import os
 import random
+import re
+import sys
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -20,37 +25,39 @@ FONT_CANDIDATES = (
     '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf',
 )
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'noise-assets')
+ACCENT_LINE_PATTERN = re.compile(r'^:accent-stress-line:\s*(.+)$', re.MULTILINE)
 
-# Must match :accent-stress-line: in test-ocr.adoc byte-for-byte.
-ACCENT_STRESS_LINE = (
-    'Più però crème naïve résumé, piñata façade, pædiatric œuvre; '
-    'Zürich straße, łódź, ångström; São José.'
-)
 
-TEXT_UNIFORM = (
-    'Uniform mid-grey panel (~#A8A8A8). OCR should read this line despite '
-    'a flat non-white backing similar to tinted copier paper. '
-    + ACCENT_STRESS_LINE
-)
+def parse_accent_stress_line(adoc_path: Path) -> str:
+    raw = adoc_path.read_text(encoding='utf-8')
+    match = ACCENT_LINE_PATTERN.search(raw)
+    if not match:
+        raise ValueError(f'no :accent-stress-line: in {adoc_path}')
+    return match.group(1).strip()
 
-TEXT_GRADIENT = (
-    'Subtle vertical gradient from ~#909090 to ~#C8C8C8. Tests thresholding '
-    'when background luminance drifts smoothly across the line. '
-    + ACCENT_STRESS_LINE
-)
 
-TEXT_SHADING = (
-    'Low-frequency shading and vignette mimic uneven platen lighting or mild '
-    'drum wear; strokes should still decode cleanly. '
-    + ACCENT_STRESS_LINE
-)
-
-TEXT_SPECKLE = (
-    'High-frequency speckle and salt-and-pepper noise mimic print soot, dust, '
-    'and coarse halftone; text must separate from background grain. '
-    + ACCENT_STRESS_LINE
-)
+def load_noise_config(lang_dir: Path) -> dict:
+    adoc_path = lang_dir / 'test-ocr.adoc'
+    json_path = lang_dir / 'noise-image-text.json'
+    if not json_path.is_file():
+        raise FileNotFoundError(f'missing {json_path}')
+    accent_adoc = parse_accent_stress_line(adoc_path)
+    with json_path.open(encoding='utf-8') as f:
+        data = json.load(f)
+    accent_json = data.get('accent_stress_line')
+    if not isinstance(accent_json, str):
+        raise ValueError(f'{json_path} must have string accent_stress_line')
+    if accent_json != accent_adoc:
+        raise ValueError(
+            f'accent_stress_line mismatch:\n  adoc ({adoc_path}): {accent_adoc!r}\n'
+            f'  json ({json_path}): {accent_json!r}',
+        )
+    required = ('uniform', 'gradient', 'shading', 'speckle')
+    for key in required:
+        val = data.get(key)
+        if not isinstance(val, str):
+            raise ValueError(f'{json_path} must have string key {key!r}')
+    return data
 
 
 def load_font():
@@ -216,23 +223,47 @@ def render_card(kind, text, rng):
     return img
 
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
-    rng = random.Random(SEED)
-
-    cards = (
-        ('uniform-dark.png', 'uniform', TEXT_UNIFORM),
-        ('gradient-panel.png', 'gradient', TEXT_GRADIENT),
-        ('uneven-shading.png', 'shading', TEXT_SHADING),
-        ('speckle-print.png', 'speckle', TEXT_SPECKLE),
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description='Write noise strip PNGs under <lang-dir>/noise-assets/.',
     )
+    parser.add_argument(
+        '--lang-dir',
+        type=Path,
+        required=True,
+        help='Path to torture/<language> (contains test-ocr.adoc, noise-image-text.json).',
+    )
+    args = parser.parse_args()
+    lang_dir = args.lang_dir.resolve()
+    if not lang_dir.is_dir():
+        print(f'Error: not a directory: {lang_dir}', file=sys.stderr)
+        return 1
+    try:
+        data = load_noise_config(lang_dir)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f'Error: {exc}', file=sys.stderr)
+        return 1
+
+    accent = data['accent_stress_line']
+    cards = (
+        ('uniform-dark.png', 'uniform', data['uniform'] + accent),
+        ('gradient-panel.png', 'gradient', data['gradient'] + accent),
+        ('uneven-shading.png', 'shading', data['shading'] + accent),
+        ('speckle-print.png', 'speckle', data['speckle'] + accent),
+    )
+
+    out_dir = lang_dir / 'noise-assets'
+    os.makedirs(out_dir, exist_ok=True)
+    rng = random.Random(SEED)
 
     for filename, kind, text in cards:
         img = render_card(kind, text, rng)
-        path = os.path.join(OUT_DIR, filename)
-        img.save(path, 'PNG', dpi=(144, 144))
+        path = out_dir / filename
+        img.save(str(path), 'PNG', dpi=(144, 144))
         print('wrote', path)
+
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

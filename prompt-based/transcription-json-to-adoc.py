@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -16,7 +17,27 @@ def load_schema() -> dict:
         return json.load(schema_file)
 
 
-def lines_to_adoc_body(payload: dict) -> str:
+def strip_transcription_inline_markup(text: str) -> str:
+    '''Remove common inline bold/italic/code markers from one line of text.
+
+    Best-effort for CER-style comparison: ``**bold**``, ``*italic*``, ``__..__``,
+    ``_.._``, and `` `mono` `` forms are unwrapped. Odd nesting, unmatched pairs,
+    or asterisks used as punctuation may be altered.
+    '''
+    s = text
+    for _ in range(8):
+        prev = s
+        s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)
+        s = re.sub(r'__(.+?)__', r'\1', s)
+        s = re.sub(r'`([^`]+)`', r'\1', s)
+        s = re.sub(r'\*(.+?)\*', r'\1', s)
+        s = re.sub(r'_(.+?)_', r'\1', s)
+        if s == prev:
+            break
+    return s
+
+
+def lines_to_adoc_body(payload: dict, *, strip_inline_markup: bool = False) -> str:
     lines = payload.get('lines')
     if not isinstance(lines, list):
         return ''
@@ -24,7 +45,11 @@ def lines_to_adoc_body(payload: dict) -> str:
     for item in lines:
         if isinstance(item, dict) and 'text' in item:
             t = item.get('text', '')
-            texts.append(t if isinstance(t, str) else '')
+            if not isinstance(t, str):
+                t = ''
+            if strip_inline_markup:
+                t = strip_transcription_inline_markup(t)
+            texts.append(t)
     return '\n'.join(texts)
 
 
@@ -58,6 +83,14 @@ def main() -> int:
         help=(
             'Skip jsonschema validation. For debugging or hand-edited JSON; '
             'normal use should validate.'
+        ),
+    )
+    parser.add_argument(
+        '--strip-inline-markup',
+        action='store_true',
+        help=(
+            'Strip common inline **bold**, *italic*, __underline__, _italic_, and '
+            '`code` markers from each line before writing (useful for plain CER).'
         ),
     )
     args = parser.parse_args()
@@ -100,7 +133,10 @@ def main() -> int:
                 )
                 return 1
 
-        body = lines_to_adoc_body(payload)
+        body = lines_to_adoc_body(
+            payload,
+            strip_inline_markup=args.strip_inline_markup,
+        )
         if args.output is not None:
             out_path = args.output.resolve()
         else:

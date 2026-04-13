@@ -194,4 +194,6 @@ python prompt-based/build-transcribed-chunk-pdfs.py --working-dir prompt-based/t
 
 Developer-oriented content (tests, fixtures, implementation notes) is in [`docs/code/`](../docs/code/) at the repository root, starting with [`developer-usage.md`](../docs/code/developer-usage.md).
 
+See also [`tests/README.md`](tests/README.md) for torture OCR integration tests.
+
 The helper script `tests/chunk-lines-boxes-export.py` supports **`--chunk-dir`** the same way as `review-chunk-lines.py` when exporting box overlays for debugging.

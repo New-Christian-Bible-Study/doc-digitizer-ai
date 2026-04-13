@@ -19,18 +19,18 @@ Optional: set an environment variable in your own scripts (for example `STRESS_T
 
 Install dependencies from the repository root (`pip install -r requirements.txt`). The script drops Asciidoctor-only `[.role]` lines and wraps `~#` hex color tokens for AsciiDoc3 so they are not parsed as subscript markup.
 
-Example (run from the repository root; the torture fixture matches with emphasis markers preserved):
+Example (run from the repository root; per-language torture sources live under `torture/<lang>/`; use `--keep-emphasis-markers` when ground truth keeps quotes around letters that AsciiDoc turns into emphasis):
 
 ```bash
 python stress-tests/compute-cer.py \
-  stress-tests/torture/test-ocr.adoc \
-  stress-tests/torture/ground-truth.txt \
+  stress-tests/torture/english/some-transcription.adoc \
+  stress-tests/torture/english/ground-truth.txt \
   --keep-emphasis-markers
 ```
 
 ### Why `--keep-emphasis-markers` exists
 
-AsciiDoc treats **paired single quotes** around short text as *quotes / emphasis*, not necessarily as literal apostrophe characters that survive unchanged into HTML. For example, in [`torture/test-ocr.adoc`](torture/test-ocr.adoc) the phrase `distinguish 'e' from 'o'` uses ASCII single quotes in the source, but AsciiDoc3 still applies its **quoting and substitution rules** so those letters are emitted as **emphasized** spans in HTML (italic-style markup), not as three plain text characters `'` + `e` + `'` in the same way a hand-written ground truth file spells them.
+AsciiDoc treats **paired single quotes** around short text as *quotes / emphasis*, not necessarily as literal apostrophe characters that survive unchanged into HTML. For example, in [`torture/english/test-ocr.adoc`](torture/english/test-ocr.adoc) the phrase `distinguish 'e' from 'o'` uses ASCII single quotes in the source, but AsciiDoc3 still applies its **quoting and substitution rules** so those letters are emitted as **emphasized** spans in HTML (italic-style markup), not as three plain text characters `'` + `e` + `'` in the same way a hand-written ground truth file spells them.
 
 After that, **html2text** decides how emphasis becomes characters:
 

@@ -1,0 +1,91 @@
+= Pagina di stress test OCR
+:doctype: article
+:accent-stress-line: Sì: università e città; perché il caffè, il ragù e più tè — già lunedì; andrò domani. Taxi, whisky, jogging.
+
+== 1. Stress test sulla dimensione del carattere
+[.tiny]
+Questo testo è a 4 punti. Serve a verificare i limiti di risoluzione del motore OCR e la capacità del modello di distinguere 'e' da 'o' su scale microscopiche.
+
+[.tiny]
+{accent-stress-line}
+
+[.fine-print]
+Questo testo è a 6 punti. È tipico delle note legali in carattere piccolo: i modelli di qualità dovrebbero leggerlo, ma spesso falliscono i motori in stile Tesseract.
+
+[.fine-print]
+{accent-stress-line}
+
+== 2. Test di contrasto e luminanza
+[.ghost]
+Questo testo è reso in #E0E0E0 (grigio chiaro). Verifica le capacità di soglia del motore e la sensibilità ai bordi a basso contrasto.
+
+[.ghost]
+{accent-stress-line}
+
+[.phantom]
+Questo testo è reso in #F2F2F2. A occhio nudo su un monitor comune è quasi invisibile. Per molti modelli di visione è un test molto difficile.
+
+[.phantom]
+{accent-stress-line}
+
+== 3. Stress spaziale e di impaginazione
+[.cramped]
+Questo paragrafo usa un'interlinea di 0.7.
+Riducendo lo spazio verticale tra le righe,
+verifichiamo se l'OCR mantiene l'allineamento 
+alla linea di base senza fondere caratteri 
+dalla riga sopra o sotto.
+
+[.cramped]
+{accent-stress-line}
+
+== 4. Simulazione di rumore di fondo
+// In PDF, section 4 uses generated PNGs (see gen-noise-stress-images.py). HTML shows the transcript for ground-truth.txt.
+
+=== 4.1 Pannello uniforme scuro
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/uniform-dark.png[Pannello grigio medio uniforme per stress OCR,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+Pannello grigio uniforme (~#A8A8A8). L'OCR deve leggere questa riga nonostante uno sfondo non bianco simile a carta da copiatrice leggermente tinta.
+
+{accent-stress-line}
+endif::[]
+
+=== 4.2 Gradiente sottile
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/gradient-panel.png[Pannello a gradiente verticale per stress OCR,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+Gradiente verticale sottile da ~#909090 a ~#C8C8C8. Verifica la soglia quando la luminosità dello sfondo varia lungo la riga.
+
+{accent-stress-line}
+endif::[]
+
+=== 4.3 Ombreggiatura irregolare
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/uneven-shading.png[Ombreggiatura a bassa frequenza per stress OCR,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+Ombreggiatura a bassa frequenza e vignettatura imitano illuminazione irregolare del piano o usura leggera del tamburo; i tratti devono restare leggibili.
+
+{accent-stress-line}
+endif::[]
+
+=== 4.4 Rumore da stampa e granulosità
+
+ifeval::["{backend}" == "pdf"]
+image::noise-assets/speckle-print.png[Granulosità e rumore tipo retinatura per stress OCR,pdfwidth=100%,align=center]
+endif::[]
+
+ifeval::["{backend}" != "pdf"]
+Rumore ad alta frequenza e granulosità tipo sale e pepe imitano fuliggine, polvere e retinatura grossolana; il testo deve separarsi dal fondo.
+
+{accent-stress-line}
+endif::[]

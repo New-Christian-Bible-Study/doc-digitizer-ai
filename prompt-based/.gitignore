@@ -11,7 +11,10 @@ tests/test-1/transcriptions/*
 !tests/test-1/transcriptions/test-a_004-005_summary.md
 !tests/test-1/transcriptions/test-a_004-005_raw.json
 
-# Live outputs (prompt-based/tests/test-torture-ocr)
-tests/test-torture-ocr/transcriptions/*
-!tests/test-torture-ocr/transcriptions/.gitkeep
-tests/test-torture-ocr/cer-report.txt
+# Live outputs (prompt-based/tests/test-torture-ocr/<lang>)
+tests/test-torture-ocr/english/transcriptions/*
+!tests/test-torture-ocr/english/transcriptions/.gitkeep
+tests/test-torture-ocr/english/cer-report.txt
+tests/test-torture-ocr/italian/transcriptions/*
+!tests/test-torture-ocr/italian/transcriptions/.gitkeep
+tests/test-torture-ocr/italian/cer-report.txt

@@ -1,20 +1,27 @@
 #!/bin/bash
 set -euo pipefail
 
-# Generate the PDF and ground truth for the OCR stress test
+# Generate PDF and ground truth for one torture language fixture.
+# Usage: ./gen-pdf-and-ground-truth.sh english
+#        ./gen-pdf-and-ground-truth.sh italian
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$HERE"
+LANG_REL="${1:?usage: $0 <english|italian>}"
+LANG_DIR="$HERE/$LANG_REL"
 
-python3 gen-noise-stress-images.py
+if [[ ! -d "$LANG_DIR" ]]; then
+  echo "not a directory: $LANG_DIR" >&2
+  exit 1
+fi
 
-asciidoctor-pdf -a pdf-theme=ocr-torture-theme.yml test-ocr.adoc -o test-ocr.pdf
+cd "$LANG_DIR"
 
-# Generate a temporary HTML file
+python3 "$HERE/gen-noise-stress-images.py" --lang-dir "$LANG_DIR"
+
+asciidoctor-pdf -a pdf-theme="$HERE/ocr-torture-theme.yml" test-ocr.adoc -o test-ocr.pdf
+
 asciidoctor test-ocr.adoc -o temp.html
 
-# Use pandoc to create the clean ground truth
 pandoc temp.html -t plain -o ground-truth.txt
 
-# Clean up the temporary HTML file
 rm temp.html

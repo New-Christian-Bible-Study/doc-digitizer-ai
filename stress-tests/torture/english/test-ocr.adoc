@@ -1,6 +1,6 @@
 = OCR Stress Test Page
 :doctype: article
-:accent-stress-line: Più però crème naïve résumé, piñata façade, pædiatric œuvre; Zürich straße, łódź, ångström; São José.
+:accent-stress-line: The five boxing wizards jump quickly. 0123456789 Il1O0 oO
 
 == 1. Font Size Stress Test
 [.tiny]

@@ -1,0 +1,7 @@
+{
+  "accent_stress_line": "Sì: università e città; perché il caffè, il ragù e più tè — già lunedì; andrò domani. Taxi, whisky, jogging.",
+  "uniform": "Pannello grigio uniforme (~#A8A8A8). L'OCR deve leggere questa riga nonostante uno sfondo non bianco simile a carta da copiatrice leggermente tinta. ",
+  "gradient": "Gradiente verticale sottile da ~#909090 a ~#C8C8C8. Verifica la soglia quando la luminosità dello sfondo varia lungo la riga. ",
+  "shading": "Ombreggiatura a bassa frequenza e vignettatura imitano illuminazione irregolare del piano o usura leggera del tamburo; i tratti devono restare leggibili. ",
+  "speckle": "Rumore ad alta frequenza e granulosità tipo sale e pepe imitano fuliggine, polvere e retinatura grossolana; il testo deve separarsi dal fondo. "
+}

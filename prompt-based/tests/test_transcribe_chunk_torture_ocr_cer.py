@@ -1,10 +1,21 @@
 '''Live integration test that transcribes a torture OCR sample, computes CER
 against ground truth, and fails when error rate exceeds the configured cutoff.
+
+Each immediate subdirectory of ``stress-tests/torture/`` that contains
+``test-ocr.pdf`` is treated as one language fixture (names are directory names,
+e.g. ``english``, ``italian``). New languages only require adding that tree; no
+edit to this file.
+
+To run CER for a single language, set ``TORTURE_OCR_LANG`` to that directory
+name, for example::
+
+    TORTURE_OCR_LANG=italian pytest prompt-based/tests/test_transcribe_chunk_torture_ocr_cer.py -v
 '''
 
 import difflib
 import importlib.util
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,7 +29,7 @@ from transcribe_integration_helpers import (
 )
 
 
-# Maximum allowed character error rate (fraction) vs stress-tests/torture/ground-truth.txt.
+# Maximum allowed character error rate (fraction) vs stress-tests/torture/<lang>/ground-truth.txt.
 # Single knob for experimentation; adjust as models and prompts change.
 TORTURE_OCR_CER_CUTOFF = 0.05
 
@@ -27,19 +38,48 @@ _MAX_DIFF_LINES = 5000
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = STRATEGY_ROOT.parent
-WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-torture-ocr'
-TORTURE_DIR = REPO_ROOT / 'stress-tests' / 'torture'
+TORTURE_ROOT = REPO_ROOT / 'stress-tests' / 'torture'
 CHUNK_FILENAME = 'test-ocr.pdf'
-CHUNK_PDF_PATH = TORTURE_DIR / CHUNK_FILENAME
-RAW_JSON_PATH = WORKING_DIR / 'transcriptions' / 'test-ocr_raw.json'
-PLAIN_TEXT_PATH = RAW_JSON_PATH.with_suffix('.txt')
-AI_LOG_PATH = WORKING_DIR / 'transcriptions' / 'test-ocr-ai-log.md'
-CER_REPORT_PATH = WORKING_DIR / 'cer-report.txt'
-GROUND_TRUTH_PATH = TORTURE_DIR / 'ground-truth.txt'
+
+
+def _discover_torture_language_ids():
+    '''Directory names under TORTURE_ROOT that are language fixtures (have chunk PDF).'''
+    if not TORTURE_ROOT.is_dir():
+        return []
+    names = []
+    for path in TORTURE_ROOT.iterdir():
+        if path.is_dir() and (path / CHUNK_FILENAME).is_file():
+            names.append(path.name)
+    return sorted(names)
+
+
+def _torture_lang_params_for_parametrize():
+    '''Languages to parametrize; honor TORTURE_OCR_LANG for a single-language run.'''
+    discovered = _discover_torture_language_ids()
+    only = os.environ.get('TORTURE_OCR_LANG', '').strip()
+    if only:
+        if only not in discovered:
+            raise pytest.UsageError(
+                f'TORTURE_OCR_LANG={only!r} is not a torture language directory '
+                f'with {CHUNK_FILENAME} under {TORTURE_ROOT}. '
+                f'Available: {discovered!r}',
+            )
+        return [only]
+    return discovered
+
+
+TORTURE_LANG_PARAMS = _torture_lang_params_for_parametrize()
+_RAW_JSON_NAME = 'test-ocr_raw.json'
 _COMPUTE_CER_PATH = REPO_ROOT / 'stress-tests' / 'compute-cer.py'
+_TRANSCRIPTION_JSON_TO_ADOC_PATH = STRATEGY_ROOT / 'transcription-json-to-adoc.py'
 
 # Match compute-cer.py default (strip-html-emphasis).
 _STRIP_HTML_EMPHASIS = True
+
+# CER vocabulary (same as speech/ASR and OCR metrics): the **reference** is the
+# known-correct text (here, ground-truth.txt). The **hypothesis** is the system's
+# transcription—the model output we score. Variables named hypothesis_* are the
+# hypothesis side at different stages (raw line-joined text vs after normalize_for_cer).
 
 
 def _load_compute_cer_module():
@@ -54,20 +94,38 @@ def _load_compute_cer_module():
     return module
 
 
-def _raw_json_to_plain(payload: dict) -> str:
-    '''Join transcription line texts like transcription-json-to-adoc (no AsciiDoc).'''
-    lines = payload.get('lines')
-    if not isinstance(lines, list):
-        return ''
-    texts = []
-    for item in lines:
-        if isinstance(item, dict) and 'text' in item:
-            t = item.get('text', '')
-            texts.append(t if isinstance(t, str) else '')
-    return '\n'.join(texts)
+def _load_transcription_json_to_adoc_module():
+    spec = importlib.util.spec_from_file_location(
+        'transcription_json_to_adoc',
+        _TRANSCRIPTION_JSON_TO_ADOC_PATH,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(
+            f'Cannot load transcription-json-to-adoc from {_TRANSCRIPTION_JSON_TO_ADOC_PATH}',
+        )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _hypothesis_plain_from_payload(payload: dict) -> str:
+    '''Build the hypothesis string from Pass 1 JSON before CER normalization.
+
+    **hypothesis_plain** is the model transcription as a single document: each
+    line's ``text`` joined with newlines, with inline ``**bold**`` / ``*italic*``
+    markers stripped so CER is not penalized for formatting. It is not yet run
+    through ``normalize_for_cer`` (whitespace, smart quotes, heading markup, etc.).
+    '''
+    mod = _load_transcription_json_to_adoc_module()
+    return mod.lines_to_adoc_body(payload, strip_inline_markup=True)
 
 
 def _normalized_truth_and_hypothesis(hypothesis_plain: str, truth_raw: str) -> tuple[str, str]:
+    '''Return (reference, hypothesis) both passed through ``normalize_for_cer``.
+
+    ``hypothesis_plain`` is the line-joined hypothesis; the returned second
+    value is that same hypothesis after normalization, ready for Levenshtein.
+    '''
     compute_cer = _load_compute_cer_module()
     normalize = compute_cer.normalize_for_cer
     truth = normalize(truth_raw, _STRIP_HTML_EMPHASIS)
@@ -76,6 +134,7 @@ def _normalized_truth_and_hypothesis(hypothesis_plain: str, truth_raw: str) -> t
 
 
 def _cer_and_distance(truth: str, hypothesis: str) -> tuple[float, int]:
+    '''``truth`` and ``hypothesis`` are normalized reference and hypothesis strings.'''
     distance = Levenshtein.distance(truth, hypothesis)
     cer = distance / len(truth) if len(truth) else 0.0
     return cer, distance
@@ -101,6 +160,12 @@ def _word_diff_lines(truth: str, hypothesis: str) -> tuple[list[str], bool]:
 
 def _build_cer_report(
     *,
+    chunk_pdf_path: Path,
+    ground_truth_path: Path,
+    raw_json_path: Path,
+    plain_text_path: Path,
+    ai_log_path: Path,
+    cer_report_path: Path,
     truth_raw: str,
     hypothesis_plain: str,
     truth_norm: str,
@@ -122,15 +187,16 @@ def _build_cer_report(
         '',
         'Paths',
         '-----',
-        f'Chunk PDF: {CHUNK_PDF_PATH}',
-        f'Ground truth: {GROUND_TRUTH_PATH}',
-        f'Raw JSON: {RAW_JSON_PATH}',
-        f'Plain transcription (line-joined): {PLAIN_TEXT_PATH}',
-        f'AI log: {AI_LOG_PATH}',
+        f'Chunk PDF: {chunk_pdf_path}',
+        f'Ground truth: {ground_truth_path}',
+        f'Raw JSON: {raw_json_path}',
+        f'Plain transcription (line-joined): {plain_text_path}',
+        f'AI log: {ai_log_path}',
         '',
         'Normalization',
         '---------------',
         'Same as stress-tests/compute-cer.py: normalize_for_cer(..., strip_html_emphasis=True).',
+        'Hypothesis text: lines_to_adoc_body(..., strip_inline_markup=True) from transcription-json-to-adoc.py.',
         'CER = Levenshtein distance / len(ground truth normalized).',
         '',
         'CER summary',
@@ -178,27 +244,44 @@ def _build_cer_report(
 
 
 @pytest.mark.integration
-def test_live_integration_torture_ocr_cer_within_cutoff():
+@pytest.mark.skipif(
+    not TORTURE_LANG_PARAMS,
+    reason=(
+        f'No torture language directories with {CHUNK_FILENAME} under {TORTURE_ROOT}'
+    ),
+)
+@pytest.mark.parametrize('torture_lang', TORTURE_LANG_PARAMS)
+def test_live_integration_torture_ocr_cer_within_cutoff(torture_lang):
     skip_if_missing_api_key()
 
-    for path in (RAW_JSON_PATH, AI_LOG_PATH, PLAIN_TEXT_PATH, CER_REPORT_PATH):
+    torture_dir = TORTURE_ROOT / torture_lang
+    chunk_pdf_path = torture_dir / CHUNK_FILENAME
+    ground_truth_path = torture_dir / 'ground-truth.txt'
+    working_dir = STRATEGY_ROOT / 'tests' / 'test-torture-ocr' / torture_lang
+    raw_json_path = working_dir / 'transcriptions' / _RAW_JSON_NAME
+    plain_text_path = raw_json_path.with_suffix('.txt')
+    ai_log_path = working_dir / 'transcriptions' / 'test-ocr-ai-log.md'
+    cer_report_path = working_dir / 'cer-report.txt'
+
+    for path in (raw_json_path, ai_log_path, plain_text_path, cer_report_path):
         if path.exists():
             path.unlink()
 
     transcribe_result = run_live_transcription(
-        WORKING_DIR,
+        working_dir,
         CHUNK_FILENAME,
         STRATEGY_PROMPT_PATH,
-        chunk_dir=TORTURE_DIR,
+        chunk_dir=torture_dir,
     )
     assert transcribe_result.returncode == 0, transcribe_result.stderr
-    assert RAW_JSON_PATH.is_file()
+    assert raw_json_path.is_file()
 
-    payload = json.loads(RAW_JSON_PATH.read_text(encoding='utf-8'))
-    hypothesis_plain = _raw_json_to_plain(payload)
-    PLAIN_TEXT_PATH.write_text(hypothesis_plain, encoding='utf-8')
+    payload = json.loads(raw_json_path.read_text(encoding='utf-8'))
+    # Hypothesis (model output) before shared CER normalization; saved for debugging.
+    hypothesis_plain = _hypothesis_plain_from_payload(payload)
+    plain_text_path.write_text(hypothesis_plain, encoding='utf-8')
 
-    truth_raw = GROUND_TRUTH_PATH.read_text(encoding='utf-8')
+    truth_raw = ground_truth_path.read_text(encoding='utf-8')
     truth_norm, hypothesis_norm = _normalized_truth_and_hypothesis(
         hypothesis_plain,
         truth_raw,
@@ -212,8 +295,14 @@ def test_live_integration_torture_ocr_cer_within_cutoff():
         hypothesis_norm,
     ).ratio()
 
-    CER_REPORT_PATH.write_text(
+    cer_report_path.write_text(
         _build_cer_report(
+            chunk_pdf_path=chunk_pdf_path,
+            ground_truth_path=ground_truth_path,
+            raw_json_path=raw_json_path,
+            plain_text_path=plain_text_path,
+            ai_log_path=ai_log_path,
+            cer_report_path=cer_report_path,
             truth_raw=truth_raw,
             hypothesis_plain=hypothesis_plain,
             truth_norm=truth_norm,
@@ -228,7 +317,7 @@ def test_live_integration_torture_ocr_cer_within_cutoff():
 
     assert cer <= TORTURE_OCR_CER_CUTOFF, (
         f'CER {cer:.4%} exceeds cutoff {TORTURE_OCR_CER_CUTOFF:.4%}; '
-        f'see {CER_REPORT_PATH}'
+        f'see {cer_report_path}'
     )
 
 

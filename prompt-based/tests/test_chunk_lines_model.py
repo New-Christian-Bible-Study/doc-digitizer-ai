@@ -3,9 +3,13 @@
 from pathlib import Path
 
 from chunk_lines_model import (
+    REVIEW_COMPLETE_KEY,
+    REVIEWER_CHANGED_KEY,
     REVIEW_PDF_RASTER_DPI,
+    ChunkLinesSession,
     TranscriptionPaths,
     clamp_box_2d_to_pixels,
+    line_text,
     line_confidence_label,
     line_notes,
     normalized_center_y_for_line,
@@ -56,6 +60,11 @@ def test_line_notes_defaults_to_empty_string():
     assert line_notes({'notes': 'hard glyph'}) == 'hard glyph'
 
 
+def test_line_text_returns_rstripped_string():
+    assert line_text({'text': 'abc   '}) == 'abc'
+    assert line_text({'text': None}) == ''
+
+
 def test_resolve_chunk_pdf_dir_default_is_chunk_pdfs_under_working(tmp_path: Path):
     wd = tmp_path / 'proj'
     wd.mkdir()
@@ -85,3 +94,37 @@ def test_resolve_transcription_paths_uses_chunk_pdf_dir(tmp_path: Path):
     assert isinstance(r, TranscriptionPaths)
     assert r.chunk_path == chunks / 'x.pdf'
     assert r.raw_path == trans / 'x_raw.json'
+
+
+def test_review_flags_compare_against_raw_baseline():
+    session = ChunkLinesSession()
+    session.payload = {'lines': [{'text': 'raw one'}, {'text': 'raw two'}]}
+    session.lines = session.payload['lines']
+    session.editable_indices = [0, 1]
+    session._init_review_metadata({'lines': [{'text': 'raw one'}, {'text': 'raw two'}]})
+
+    assert session.payload[REVIEW_COMPLETE_KEY] is False
+    assert session.lines[0][REVIEWER_CHANGED_KEY] is False
+    assert session.lines[1][REVIEWER_CHANGED_KEY] is False
+
+    session.lines[1]['text'] = 'edited two'
+    session.refresh_reviewer_changed_flags()
+    assert session.lines[0][REVIEWER_CHANGED_KEY] is False
+    assert session.lines[1][REVIEWER_CHANGED_KEY] is True
+
+
+def test_low_confidence_unchanged_stats_counts_only_low():
+    session = ChunkLinesSession()
+    session.payload = {'lines': [{'text': 'a'}, {'text': 'b'}, {'text': 'c'}]}
+    session.lines = session.payload['lines']
+    session.editable_indices = [0, 1, 2]
+    session.lines[0]['confidence_label'] = 'low'
+    session.lines[1]['confidence_label'] = 'medium'
+    session.lines[2]['confidence_label'] = 'low'
+    session.lines[0][REVIEWER_CHANGED_KEY] = False
+    session.lines[1][REVIEWER_CHANGED_KEY] = False
+    session.lines[2][REVIEWER_CHANGED_KEY] = True
+
+    unchanged_low, total_low = session.low_confidence_unchanged_stats()
+    assert unchanged_low == 1
+    assert total_low == 2

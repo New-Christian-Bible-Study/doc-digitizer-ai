@@ -80,6 +80,10 @@ SNAP_MIN_BAND_HEIGHT_PX = 2
 # Prompt-injected markers (not printed on the page).
 # Must stay aligned with Pass 1 prompt / any transcribe normalization of line text.
 _PAGE_MARKER_PATTERN = re.compile(r'^\s*//\s*Page\s+\d+\s*$', re.IGNORECASE)
+# Top-level final JSON flag: true only after explicit "mark review complete" flow.
+REVIEW_COMPLETE_KEY = 'review_complete'
+# Per-editable-line final JSON flag: whether reviewer text differs from raw baseline.
+REVIEWER_CHANGED_KEY = 'reviewer_changed'
 
 
 def is_injected_page_marker(text: object) -> bool:
@@ -409,6 +413,13 @@ def rstrip_line_text(value: object) -> object:
     return value
 
 
+def line_text(line: dict) -> str:
+    value = line.get('text', '')
+    if not isinstance(value, str):
+        return ''
+    return value.rstrip()
+
+
 def load_page_images(pdf_path: Path) -> list[Image.Image]:
     """Rasterize each PDF page to a PIL image at :data:`REVIEW_PDF_RASTER_DPI`."""
     return convert_from_path(str(pdf_path), dpi=REVIEW_PDF_RASTER_DPI)
@@ -418,6 +429,10 @@ def load_payload(raw_path: Path, final_path: Path) -> dict:
     # Prefer final when it exists so reopening the chunk loads saved review work, not stale raw.
     if final_path.exists():
         return json.loads(final_path.read_text(encoding='utf-8'))
+    return json.loads(raw_path.read_text(encoding='utf-8'))
+
+
+def load_raw_payload(raw_path: Path) -> dict:
     return json.loads(raw_path.read_text(encoding='utf-8'))
 
 
@@ -491,6 +506,7 @@ class ChunkLinesSession:
         self.editable_ridx: int = 0
         self.dirty: bool = False
         self.source_raw_path: str = ''
+        self.original_editable_texts: dict[int, str] = {}
 
     @property
     def is_loaded(self) -> bool:
@@ -519,6 +535,7 @@ class ChunkLinesSession:
         try:
             page_images = load_page_images(resolved.chunk_path)
             payload = load_payload(resolved.raw_path, resolved.final_path)
+            raw_payload = load_raw_payload(resolved.raw_path)
         except Exception as exc:
             return f'Could not read chunk or JSON. {exc}'
 
@@ -541,7 +558,26 @@ class ChunkLinesSession:
         self.editable_ridx = 0
         self.dirty = False
         self.source_raw_path = str(resolved.raw_path)
+        self._init_review_metadata(raw_payload)
         return None
+
+    def _init_review_metadata(self, raw_payload: dict) -> None:
+        if not isinstance(self.payload, dict):
+            self.payload = {}
+        self.payload.setdefault(REVIEW_COMPLETE_KEY, False)
+
+        raw_lines = raw_payload.get('lines')
+        if not isinstance(raw_lines, list):
+            raw_lines = []
+
+        self.original_editable_texts = {}
+        for idx in self.editable_indices:
+            if idx < len(raw_lines) and isinstance(raw_lines[idx], dict):
+                baseline = line_text(raw_lines[idx])
+            else:
+                baseline = line_text(self.lines[idx])
+            self.original_editable_texts[idx] = baseline
+        self.refresh_reviewer_changed_flags()
 
     def clamp_editable_ridx(self) -> None:
         n = len(self.editable_indices)
@@ -571,6 +607,30 @@ class ChunkLinesSession:
             return
         save_payload(self.paths.final_path, self.payload)
 
+    def is_review_complete(self) -> bool:
+        return bool(self.payload.get(REVIEW_COMPLETE_KEY, False))
+
+    def set_review_complete(self, value: bool) -> None:
+        self.payload[REVIEW_COMPLETE_KEY] = bool(value)
+
+    def refresh_reviewer_changed_flags(self) -> None:
+        for idx in self.editable_indices:
+            baseline = self.original_editable_texts.get(idx, '')
+            current = line_text(self.lines[idx])
+            self.lines[idx][REVIEWER_CHANGED_KEY] = current != baseline
+
+    def low_confidence_unchanged_stats(self) -> tuple[int, int]:
+        total_low = 0
+        unchanged_low = 0
+        for idx in self.editable_indices:
+            line = self.lines[idx]
+            if line_confidence_label(line) != 'low':
+                continue
+            total_low += 1
+            if not bool(line.get(REVIEWER_CHANGED_KEY, False)):
+                unchanged_low += 1
+        return unchanged_low, total_low
+
     def reload_from_raw_disk(self) -> str | None:
         """Reload ``payload`` from the raw JSON path on disk. Returns error or ``None``."""
         raw = Path(self.source_raw_path)
@@ -581,4 +641,6 @@ class ChunkLinesSession:
             return 'No editable lines after reload.'
         self.editable_ridx = 0
         self.dirty = False
+        self.payload[REVIEW_COMPLETE_KEY] = False
+        self._init_review_metadata(self.payload)
         return None

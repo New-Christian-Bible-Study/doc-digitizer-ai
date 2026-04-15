@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IDP Final Line Transcription Response",
+  "description": "Human-reviewed transcription output with completion and per-line reviewer-change metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lines", "confidence_score", "confidence_label", "review_complete"],
+  "properties": {
+    "lines": {
+      "type": "array",
+      "description": "One object per visible text line in reading order",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page_number", "text", "box_2d"],
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based page index within this chunk"
+          },
+          "text": {
+            "type": "string",
+            "description": "Transcription for this line"
+          },
+          "box_2d": {
+            "type": "array",
+            "description": "[ymin, xmin, ymax, xmax] normalized 0-1000",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "confidence_label": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Per-line confidence level for triage"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Per-line rationale for uncertainty; required when line confidence is low"
+          },
+          "reviewer_changed": {
+            "type": "boolean",
+            "description": "True if reviewer changed this editable line relative to raw transcription."
+          }
+        }
+      }
+    },
+    "confidence_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Numeric confidence in the transcription (0.0 to 1.0)"
+    },
+    "confidence_label": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Human-readable confidence level"
+    },
+    "review_complete": {
+      "type": "boolean",
+      "description": "True only when a human reviewer marked this file as fully reviewed."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Deprecated top-level notes field kept for backward compatibility"
+    },
+    "model": {
+      "type": "string",
+      "description": "LiteLLM model id used for Pass 1 (stored in saved *_raw.json by transcribe-chunk.py)"
+    },
+    "configuration": {
+      "type": "string",
+      "description": "Summary of transcription settings (stored in saved *_raw.json by transcribe-chunk.py)"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "lines": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "confidence_label": {
+                  "const": "low"
+                }
+              },
+              "required": ["confidence_label"]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "if": {
+                "properties": {
+                  "confidence_label": {
+                    "const": "low"
+                  }
+                },
+                "required": ["confidence_label"]
+              },
+              "then": {
+                "required": ["notes"],
+                "properties": {
+                  "notes": {
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

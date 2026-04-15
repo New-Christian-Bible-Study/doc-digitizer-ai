@@ -26,7 +26,7 @@ from chunk_lines_model import (
 )
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SCHEMA_PATH = SCRIPT_DIR / 'transcription.schema.json'
+RAW_SCHEMA_PATH = SCRIPT_DIR / 'raw-transcription.schema.json'
 TRANSCRIBE_CONFIG_FILENAME = 'transcribe.config.json'
 VALID_REASONING_EFFORTS = ('none', 'disable', 'low', 'medium', 'high', 'minimal')
 VALID_MEDIA_RESOLUTIONS = ('low', 'medium', 'high', 'ultra_high', 'auto')
@@ -60,7 +60,7 @@ def reorder_runtime_log_event_dict(_logger, _method_name, event_dict):
 
 
 def load_schema() -> dict:
-    with SCHEMA_PATH.open('r', encoding='utf-8') as schema_file:
+    with RAW_SCHEMA_PATH.open('r', encoding='utf-8') as schema_file:
         return json.load(schema_file)
 
 

@@ -36,10 +36,13 @@ UI behavior:
 
 ## Schema and Pipeline Compatibility
 
-- `transcription.schema.json` now supports line-level `confidence_label` and `notes`.
+- `raw-transcription.schema.json` validates Pass 1 (`*_raw.json`).
+- `final-transcription.schema.json` extends final output (`*_final.json`) with:
+  - top-level `review_complete`
+  - per-editable-line `reviewer_changed`
 - Low-confidence lines require non-empty `lines[i].notes`.
-- Top-level `notes` is retained as optional backward-compatible metadata but no longer drives line review triage.
+- Top-level `notes` remains optional metadata but does not drive review triage.
 
 ## Save Behavior
 
-Saving writes edited line text into the existing `_final.json` payload while preserving line geometry and metadata fields.
+Saving writes edited line text into the existing `_final.json` payload while preserving line geometry and metadata fields. Standard Save keeps review in progress (`review_complete=false`). The completion action marks `review_complete=true`, saves, and exits.

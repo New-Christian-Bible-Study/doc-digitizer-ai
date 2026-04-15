@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IDP Raw Line Transcription Response",
+  "description": "Pass 1 response: per-line text with spatial boxes and confidence metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lines", "confidence_score", "confidence_label"],
+  "properties": {
+    "lines": {
+      "type": "array",
+      "description": "One object per visible text line in reading order",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page_number", "text", "box_2d"],
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based page index within this chunk"
+          },
+          "text": {
+            "type": "string",
+            "description": "Transcription for this line"
+          },
+          "box_2d": {
+            "type": "array",
+            "description": "[ymin, xmin, ymax, xmax] normalized 0-1000",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "confidence_label": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Per-line confidence level for triage"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Per-line rationale for uncertainty; required when line confidence is low"
+          }
+        }
+      }
+    },
+    "confidence_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Numeric confidence in the transcription (0.0 to 1.0)"
+    },
+    "confidence_label": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Human-readable confidence level"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Deprecated top-level notes field kept for backward compatibility"
+    },
+    "model": {
+      "type": "string",
+      "description": "LiteLLM model id used for Pass 1 (stored in saved *_raw.json by transcribe-chunk.py)"
+    },
+    "configuration": {
+      "type": "string",
+      "description": "Summary of transcription settings (stored in saved *_raw.json by transcribe-chunk.py)"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "lines": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "confidence_label": {
+                  "const": "low"
+                }
+              },
+              "required": ["confidence_label"]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "if": {
+                "properties": {
+                  "confidence_label": {
+                    "const": "low"
+                  }
+                },
+                "required": ["confidence_label"]
+              },
+              "then": {
+                "required": ["notes"],
+                "properties": {
+                  "notes": {
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

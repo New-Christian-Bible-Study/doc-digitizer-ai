@@ -9,12 +9,19 @@ from pathlib import Path
 import jsonschema
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SCHEMA_PATH = SCRIPT_DIR / 'transcription.schema.json'
+RAW_SCHEMA_PATH = SCRIPT_DIR / 'raw-transcription.schema.json'
+FINAL_SCHEMA_PATH = SCRIPT_DIR / 'final-transcription.schema.json'
 
 
-def load_schema() -> dict:
-    with SCHEMA_PATH.open('r', encoding='utf-8') as schema_file:
+def load_schema(schema_path: Path) -> dict:
+    with schema_path.open('r', encoding='utf-8') as schema_file:
         return json.load(schema_file)
+
+
+def schema_path_for_json(json_path: Path) -> Path:
+    if json_path.name.endswith('_final.json'):
+        return FINAL_SCHEMA_PATH
+    return RAW_SCHEMA_PATH
 
 
 def strip_transcription_inline_markup(text: str) -> str:
@@ -113,7 +120,8 @@ def main() -> int:
             'by joining each line\'s "text" field in order with newlines.'
         ),
         epilog=(
-            'By default the document is validated against transcription.schema.json '
+            'By default the document is validated against raw-transcription.schema.json '
+            'or final-transcription.schema.json based on filename suffix. '
             'before writing.'
         ),
     )
@@ -158,7 +166,7 @@ def main() -> int:
         )
         return 1
 
-    schema = load_schema() if not args.skip_schema_validation else None
+    schema_cache: dict[Path, dict] = {}
 
     for json_path in json_paths:
         if not json_path.is_file():
@@ -177,13 +185,19 @@ def main() -> int:
             print(f'Error: invalid JSON in {json_path}: {exc}', file=sys.stderr)
             return 1
 
-        if schema is not None:
+        if not args.skip_schema_validation:
+            schema_path = schema_path_for_json(json_path)
+            schema = schema_cache.get(schema_path)
+            if schema is None:
+                schema = load_schema(schema_path)
+                schema_cache[schema_path] = schema
             try:
                 jsonschema.validate(instance=payload, schema=schema)
             except jsonschema.ValidationError as exc:
                 path = ' / '.join(str(p) for p in exc.absolute_path) or '(root)'
                 print(
-                    f'Error: schema validation failed for {json_path} at {path}: {exc.message}',
+                    f'Error: schema validation failed for {json_path} '
+                    f'(schema {schema_path.name}) at {path}: {exc.message}',
                     file=sys.stderr,
                 )
                 return 1

@@ -235,12 +235,14 @@ class ReviewMainWindow(QMainWindow):
         self._btn_prev = QPushButton('◀ Prev')
         self._btn_next = QPushButton('Next ▶')
         self._btn_next_flagged = QPushButton('Next flagged')
-        self._btn_save = QPushButton('Save to final JSON')
+        self._btn_save = QPushButton('Save to final')
+        self._btn_complete_review = QPushButton('Mark review complete')
         self._btn_reload = QPushButton('Reload from raw')
         btn_row.addWidget(self._btn_prev)
         btn_row.addWidget(self._btn_next)
         btn_row.addWidget(self._btn_next_flagged)
         btn_row.addWidget(self._btn_save)
+        btn_row.addWidget(self._btn_complete_review)
         btn_row.addWidget(self._btn_reload)
         btn_row.addStretch()
         root.addLayout(btn_row)
@@ -277,6 +279,7 @@ class ReviewMainWindow(QMainWindow):
         self._btn_next.clicked.connect(ctrl._on_next)
         self._btn_next_flagged.clicked.connect(ctrl._on_next_flagged)
         self._btn_save.clicked.connect(ctrl._on_save)
+        self._btn_complete_review.clicked.connect(ctrl._on_complete_review)
         self._btn_reload.clicked.connect(ctrl._on_reload)
 
     def sync_combo_to_chunk_name(self, chunk_name: str | None) -> None:
@@ -297,6 +300,7 @@ class ReviewMainWindow(QMainWindow):
         self._btn_next.setEnabled(enabled)
         self._btn_next_flagged.setEnabled(enabled)
         self._btn_save.setEnabled(enabled)
+        self._btn_complete_review.setEnabled(enabled)
         self._btn_reload.setEnabled(enabled)
 
     def clear_line_rows(self) -> None:
@@ -620,6 +624,23 @@ class ReviewChunkLinesController:
         paths = self._session.paths
         assert paths is not None
 
+        if self._session.is_review_complete():
+            box = QMessageBox(self._view)
+            box.setWindowTitle('Already marked complete')
+            box.setText('This final JSON is already marked as review complete.')
+            box.setInformativeText('Choose whether to keep it complete or reset and continue editing.')
+            keep_btn = box.addButton('Keep complete', QMessageBox.AcceptRole)
+            reset_btn = box.addButton('Reset and continue', QMessageBox.DestructiveRole)
+            cancel_btn = box.addButton(QMessageBox.Cancel)
+            box.setDefaultButton(keep_btn)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked == cancel_btn:
+                return False
+            if clicked == reset_btn:
+                self._session.set_review_complete(False)
+                self._session.dirty = True
+
         self._view.setWindowTitle(f'Line review — {paths.chunk_name}')
         self._view.set_path_labels(paths.raw_path.name, paths.final_path.name)
         self._view.populate_lines(self._session, self)
@@ -682,9 +703,41 @@ class ReviewChunkLinesController:
         self._commit_all()
         paths = self._session.paths
         assert paths is not None
+        self._session.set_review_complete(False)
         self._session.save_to_final()
         self._session.dirty = False
         self._view.statusBar().showMessage(f'Wrote {paths.final_path}', 6000)
+
+    def _on_complete_review(self) -> None:
+        if not self._session.is_loaded:
+            return
+        self._commit_all()
+        unchanged_low, total_low = self._session.low_confidence_unchanged_stats()
+
+        box = QMessageBox(self._view)
+        box.setWindowTitle('Mark review complete')
+        box.setText('Set review_complete=true, save the final JSON, and exit?')
+        if total_low > 0 and unchanged_low > 0:
+            box.setInformativeText(
+                f'{unchanged_low} of {total_low} low confidence lines were not changed.'
+            )
+            box.setIcon(QMessageBox.Warning)
+        else:
+            box.setIcon(QMessageBox.Question)
+        cancel_btn = box.addButton('Cancel completion', QMessageBox.RejectRole)
+        exit_btn = box.addButton('Exit and mark complete', QMessageBox.AcceptRole)
+        box.setDefaultButton(exit_btn)
+        box.exec()
+        if box.clickedButton() != exit_btn:
+            return
+
+        paths = self._session.paths
+        assert paths is not None
+        self._session.set_review_complete(True)
+        self._session.save_to_final()
+        self._session.dirty = False
+        self._view.statusBar().showMessage(f'Wrote {paths.final_path}', 6000)
+        self._view.close()
 
     def _on_reload(self) -> None:
         if not self._session.is_loaded:
@@ -708,6 +761,7 @@ class ReviewChunkLinesController:
     def _commit_all(self) -> None:
         for ridx, idx in enumerate(self._session.editable_indices):
             self._session.lines[idx]['text'] = self._view.line_text(ridx).rstrip()
+        self._session.refresh_reviewer_changed_flags()
 
 
 def main() -> int:

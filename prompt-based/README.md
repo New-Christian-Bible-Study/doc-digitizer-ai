@@ -143,6 +143,10 @@ python prompt-based/transcribe-chunk.py --working-dir prompt-based/tests/test-1
 
 This step does **not** call the model. You still run `transcribe-chunk.py` first (Pass 1) to produce `transcriptions/<stem>_raw.json`. The PySide6 app (`review-chunk.py`) loads that JSON, shows each line’s crop next to editable text, and saves `transcriptions/<stem>_final.json`.
 
+`*_final.json` includes human-review metadata:
+- top-level `review_complete` boolean (set to `true` only from the explicit completion flow)
+- per-editable-line `reviewer_changed` boolean (whether reviewer changed that line compared with raw text)
+
 **System dependency:** [Poppler](https://poppler.freedesktop.org/) must be installed so `pdf2image` can rasterize the PDF (on Ubuntu: `sudo apt install poppler-utils`).
 
 The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Pass 1 sends the **PDF** to the model, while the UI uses Poppler — normalized `box_2d` line crops are **best-effort** aligned to the page aspect ratio; Gemini’s internal render may differ slightly.
@@ -163,13 +167,19 @@ python prompt-based/review-chunk.py --working-dir prompt-based/tests/test-1
 
 - `--raw-json` is optional; defaults to `<working-dir>/transcriptions/<stem>_raw.json`. Relative paths are resolved under `--working-dir`.
 - If `_final.json` already exists for that stem, it is loaded so you can resume editing.
+- If loaded `_final.json` already has `review_complete: true`, the app prompts whether to keep it complete or reset completion and continue editing.
+- **Mark review complete** button: confirms completion, warns when low-confidence lines remain unchanged, then sets `review_complete=true`, saves, and exits.
 - **Quit:** Close the window, or press Ctrl-C in the terminal (the app installs a handler so this works with Qt). If the process is stuck, from another terminal: `pkill -f review-chunk.py` or `kill <pid>` (`kill -9` only as a last resort).
 
 ## Transcription JSON to AsciiDoc
 
 To turn a Pass 1 `transcriptions/<stem>_raw.json` or reviewed `transcriptions/<stem>_final.json` into a `.adoc` file, run `transcription-json-to-adoc.py`. It reads the `lines` array and writes each line’s `text` in order, separated by newlines, next to the JSON file (e.g. `chunk_001-003_raw.json` → `chunk_001-003_raw.adoc`).
 
-By default the JSON is validated against `transcription.schema.json` before anything is written. Use `--skip-schema-validation` only for debugging or hand-edited JSON.
+By default the JSON is validated before writing:
+- `*_raw.json` against `raw-transcription.schema.json`
+- `*_final.json` against `final-transcription.schema.json`
+
+Use `--skip-schema-validation` only for debugging or hand-edited JSON.
 
 ```bash
 python prompt-based/transcription-json-to-adoc.py \

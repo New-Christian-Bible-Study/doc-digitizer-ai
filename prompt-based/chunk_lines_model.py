@@ -634,8 +634,10 @@ class ChunkLinesSession:
     def reload_from_raw_disk(self) -> str | None:
         """Reload ``payload`` from the raw JSON path on disk. Returns error or ``None``."""
         raw = Path(self.source_raw_path)
+        previous_lines = self.lines if isinstance(self.lines, list) else []
         self.payload = json.loads(raw.read_text(encoding='utf-8'))
         self.lines = self.payload['lines']
+        self._restore_confidence_metadata_from_previous(previous_lines)
         self.editable_indices = editable_line_indices(self.lines)
         if not self.editable_indices:
             return 'No editable lines after reload.'
@@ -644,3 +646,34 @@ class ChunkLinesSession:
         self.payload[REVIEW_COMPLETE_KEY] = False
         self._init_review_metadata(self.payload)
         return None
+
+    def _restore_confidence_metadata_from_previous(self, previous_lines: list) -> None:
+        """Keep confidence warnings stable across raw reloads."""
+        # First pass: restore by absolute line index when layouts match.
+        for idx, line in enumerate(self.lines):
+            if not isinstance(line, dict):
+                continue
+            if idx >= len(previous_lines):
+                continue
+            prev_line = previous_lines[idx]
+            if not isinstance(prev_line, dict):
+                continue
+            if 'confidence_label' in prev_line:
+                line['confidence_label'] = prev_line.get('confidence_label')
+            if 'notes' in prev_line:
+                line['notes'] = prev_line.get('notes')
+
+        # Second pass: restore by editable-line order to absorb marker/index drift.
+        prev_editable = editable_line_indices(previous_lines)
+        curr_editable = editable_line_indices(self.lines)
+        for ridx, curr_idx in enumerate(curr_editable):
+            if ridx >= len(prev_editable):
+                break
+            curr_line = self.lines[curr_idx]
+            prev_line = previous_lines[prev_editable[ridx]]
+            if not isinstance(curr_line, dict) or not isinstance(prev_line, dict):
+                continue
+            if 'confidence_label' in prev_line:
+                curr_line['confidence_label'] = prev_line.get('confidence_label')
+            if 'notes' in prev_line:
+                curr_line['notes'] = prev_line.get('notes')

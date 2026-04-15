@@ -128,3 +128,84 @@ def test_low_confidence_unchanged_stats_counts_only_low():
     unchanged_low, total_low = session.low_confidence_unchanged_stats()
     assert unchanged_low == 1
     assert total_low == 2
+
+
+def test_reload_from_raw_restores_missing_confidence_metadata(tmp_path: Path):
+    raw_path = tmp_path / 'chunk_raw.json'
+    raw_path.write_text(
+        '{"lines":[{"page_number":1,"text":"line one","box_2d":[0,0,10,10]}]}',
+        encoding='utf-8',
+    )
+
+    session = ChunkLinesSession()
+    session.source_raw_path = str(raw_path)
+    session.lines = [
+        {
+            'page_number': 1,
+            'text': 'line one',
+            'box_2d': [0, 0, 10, 10],
+            'confidence_label': 'medium',
+            'notes': 'faded text',
+        }
+    ]
+    session.payload = {'lines': session.lines}
+
+    err = session.reload_from_raw_disk()
+
+    assert err is None
+    assert session.lines[0]['confidence_label'] == 'medium'
+    assert session.lines[0]['notes'] == 'faded text'
+
+
+def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflicts(tmp_path: Path):
+    raw_path = tmp_path / 'chunk_raw.json'
+    raw_path.write_text(
+        (
+            '{"lines":[{"page_number":1,"text":"line one","box_2d":[0,0,10,10],'
+            '"confidence_label":"high","notes":""}]}'
+        ),
+        encoding='utf-8',
+    )
+
+    session = ChunkLinesSession()
+    session.source_raw_path = str(raw_path)
+    session.lines = [
+        {
+            'page_number': 1,
+            'text': 'line one',
+            'box_2d': [0, 0, 10, 10],
+            'confidence_label': 'medium',
+            'notes': 'faded text',
+        }
+    ]
+    session.payload = {'lines': session.lines}
+
+    err = session.reload_from_raw_disk()
+
+    assert err is None
+    assert session.lines[0]['confidence_label'] == 'medium'
+    assert session.lines[0]['notes'] == 'faded text'
+
+
+def test_reload_from_raw_restores_confidence_when_indices_shift():
+    session = ChunkLinesSession()
+    previous_lines = [
+        {'text': '// Page 1'},
+        {
+            'page_number': 1,
+            'text': 'line one',
+            'box_2d': [0, 0, 10, 10],
+            'confidence_label': 'medium',
+            'notes': 'faded text',
+        },
+    ]
+    session.payload = {
+        'lines': [
+            {'page_number': 1, 'text': 'line one', 'box_2d': [0, 0, 10, 10]},
+        ]
+    }
+    session.lines = session.payload['lines']
+    session._restore_confidence_metadata_from_previous(previous_lines)
+
+    assert session.payload['lines'][0]['confidence_label'] == 'medium'
+    assert session.payload['lines'][0]['notes'] == 'faded text'

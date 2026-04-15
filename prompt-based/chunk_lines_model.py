@@ -139,10 +139,18 @@ def resolve_transcription_paths_for_chunk(
     chunk_name: str,
     raw_json: Path | None,
     chunk_pdf_dir: Path | None = None,
+    transcriptions_dir: Path | None = None,
 ) -> TranscriptionPaths | str:
     working_dir = working_dir.resolve()
     chunk_dir = resolve_chunk_pdf_dir(working_dir, chunk_pdf_dir)
-    transcriptions_dir = working_dir / 'transcriptions'
+    if transcriptions_dir is None:
+        resolved_transcriptions_dir = working_dir / 'transcriptions'
+    else:
+        resolved_transcriptions_dir = (
+            transcriptions_dir.resolve()
+            if transcriptions_dir.is_absolute()
+            else (working_dir / transcriptions_dir).resolve()
+        )
     if not chunk_dir.is_dir():
         return (
             f'Expected a chunk PDF directory at {chunk_dir}. '
@@ -169,8 +177,8 @@ def resolve_transcription_paths_for_chunk(
             else raw_candidate.resolve()
         )
     else:
-        raw_path = transcriptions_dir / f'{stem}_raw.json'
-    final_path = transcriptions_dir / f'{stem}_final.json'
+        raw_path = resolved_transcriptions_dir / f'{stem}_raw.json'
+    final_path = resolved_transcriptions_dir / f'{stem}_final.json'
 
     if not raw_path.is_file():
         return f'Raw JSON not found: {raw_path}'
@@ -494,6 +502,7 @@ class ChunkLinesSession:
         chunk_name: str,
         raw_json_cli: Path | None,
         chunk_pdf_dir: Path | None = None,
+        transcriptions_dir: Path | None = None,
     ) -> str | None:
         """Load chunk file + JSON into this session. Returns an error message, or ``None`` on success."""
         resolved = resolve_transcription_paths_for_chunk(
@@ -501,6 +510,7 @@ class ChunkLinesSession:
             chunk_name,
             raw_json_cli,
             chunk_pdf_dir,
+            transcriptions_dir,
         )
         if isinstance(resolved, str):
             return resolved

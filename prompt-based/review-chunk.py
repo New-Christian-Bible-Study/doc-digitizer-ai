@@ -86,6 +86,16 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        '--transcriptions-dir',
+        type=Path,
+        default=None,
+        help=(
+            'Directory containing chunk transcription JSON files '
+            '(default: working-dir/transcriptions). Relative paths are '
+            'resolved under working-dir.'
+        ),
+    )
+    parser.add_argument(
         '--raw-json',
         type=Path,
         default=None,
@@ -538,10 +548,12 @@ class ReviewChunkLinesController:
         session: ChunkLinesSession,
         view: ReviewMainWindow,
         raw_json_cli: Path | None,
+        transcriptions_dir: Path | None,
     ) -> None:
         self._session = session
         self._view = view
         self._raw_json_cli = raw_json_cli
+        self._transcriptions_dir = transcriptions_dir
         view.connect_controller_signals(self)
 
     def try_initial_chunk(self) -> None:
@@ -598,6 +610,7 @@ class ReviewChunkLinesController:
             chunk_name,
             self._raw_json_cli,
             self._view.chunk_pdf_dir,
+            self._transcriptions_dir,
         )
         if err is not None:
             if show_error:
@@ -723,7 +736,12 @@ def main() -> int:
 
     session = ChunkLinesSession()
     win = ReviewMainWindow(working_dir, chunk_pdf_dir, pdf_names)
-    ctrl = ReviewChunkLinesController(session, win, raw_json_cli=cli.raw_json)
+    ctrl = ReviewChunkLinesController(
+        session,
+        win,
+        raw_json_cli=cli.raw_json,
+        transcriptions_dir=cli.transcriptions_dir,
+    )
     win.show()
     ctrl.try_initial_chunk()
     _install_terminal_interrupt_handlers(app)

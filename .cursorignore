@@ -1,0 +1,12 @@
+# Keep Cursor analysis focused on source files.
+# Test fixtures and generated OCR artifacts can keep background analysis spinning.
+
+# Python env and caches
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

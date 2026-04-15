@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from chunk_lines_model import (
+    LineRecord,
     REVIEW_COMPLETE_KEY,
     REVIEWER_CHANGED_KEY,
     REVIEW_PDF_RASTER_DPI,
@@ -100,6 +101,7 @@ def test_review_flags_compare_against_raw_baseline():
     session = ChunkLinesSession()
     session.payload = {'lines': [{'text': 'raw one'}, {'text': 'raw two'}]}
     session.lines = session.payload['lines']
+    session.line_records = [LineRecord.from_object(line) for line in session.lines]
     session.editable_indices = [0, 1]
     session._init_review_metadata({'lines': [{'text': 'raw one'}, {'text': 'raw two'}]})
 
@@ -117,6 +119,7 @@ def test_low_confidence_unchanged_stats_counts_only_low():
     session = ChunkLinesSession()
     session.payload = {'lines': [{'text': 'a'}, {'text': 'b'}, {'text': 'c'}]}
     session.lines = session.payload['lines']
+    session.line_records = [LineRecord.from_object(line) for line in session.lines]
     session.editable_indices = [0, 1, 2]
     session.lines[0]['confidence_label'] = 'low'
     session.lines[1]['confidence_label'] = 'medium'
@@ -148,6 +151,7 @@ def test_reload_from_raw_restores_missing_confidence_metadata(tmp_path: Path):
             'notes': 'faded text',
         }
     ]
+    session.line_records = [LineRecord.from_object(line) for line in session.lines]
     session.payload = {'lines': session.lines}
 
     err = session.reload_from_raw_disk()
@@ -178,6 +182,7 @@ def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflic
             'notes': 'faded text',
         }
     ]
+    session.line_records = [LineRecord.from_object(line) for line in session.lines]
     session.payload = {'lines': session.lines}
 
     err = session.reload_from_raw_disk()
@@ -205,7 +210,10 @@ def test_reload_from_raw_restores_confidence_when_indices_shift():
         ]
     }
     session.lines = session.payload['lines']
-    session._restore_confidence_metadata_from_previous(previous_lines)
+    session.line_records = [LineRecord.from_object(line) for line in session.lines]
+    session._restore_confidence_metadata_from_previous(
+        [LineRecord.from_object(line) for line in previous_lines]
+    )
 
     assert session.payload['lines'][0]['confidence_label'] == 'medium'
     assert session.payload['lines'][0]['notes'] == 'faded text'

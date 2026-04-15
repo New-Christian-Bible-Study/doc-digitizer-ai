@@ -759,8 +759,9 @@ class ReviewChunkLinesController:
         self._show_line()
 
     def _commit_all(self) -> None:
-        for ridx, idx in enumerate(self._session.editable_indices):
-            self._session.lines[idx]['text'] = self._view.line_text(ridx).rstrip()
+        for ridx in range(len(self._session.editable_indices)):
+            self._session.editable_ridx = ridx
+            self._session.commit_editable_text(self._view.line_text(ridx))
         self._session.refresh_reviewer_changed_flags()
 
 

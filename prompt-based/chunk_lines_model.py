@@ -97,7 +97,12 @@ def is_injected_page_marker(text: object) -> bool:
 
 def editable_line_indices(lines: list) -> list[int]:
     """Indices into ``payload['lines']`` for rows that are not synthetic ``// Page N`` markers."""
-    return [i for i, ln in enumerate(lines) if not is_injected_page_marker(ln.get('text', ''))]
+    out: list[int] = []
+    for i, line in enumerate(lines):
+        record = LineRecord.from_object(line)
+        if record.is_editable():
+            out.append(i)
+    return out
 
 
 def list_chunk_filenames(chunk_dir: Path) -> list[str]:
@@ -136,6 +141,50 @@ class TranscriptionPaths:
     final_path: Path
     chunk_name: str
     stem: str
+
+
+@dataclass
+class LineRecord:
+    """Typed wrapper around one payload line dictionary."""
+
+    data: dict
+
+    @classmethod
+    def from_object(cls, obj: object) -> 'LineRecord':
+        if isinstance(obj, dict):
+            return cls(obj)
+        return cls({})
+
+    def text(self) -> str:
+        value = self.data.get('text', '')
+        if not isinstance(value, str):
+            return ''
+        return value.rstrip()
+
+    def set_text(self, value: str) -> None:
+        self.data['text'] = value.rstrip()
+
+    def confidence_label(self) -> str | None:
+        value = self.data.get('confidence_label')
+        if not isinstance(value, str):
+            return None
+        label = value.strip().lower()
+        if label not in {'low', 'medium', 'high'}:
+            return None
+        return label
+
+    def notes(self) -> str:
+        value = self.data.get('notes', '')
+        return value if isinstance(value, str) else ''
+
+    def is_editable(self) -> bool:
+        return not is_injected_page_marker(self.text())
+
+    def set_reviewer_changed(self, changed: bool) -> None:
+        self.data[REVIEWER_CHANGED_KEY] = bool(changed)
+
+    def reviewer_changed(self) -> bool:
+        return bool(self.data.get(REVIEWER_CHANGED_KEY, False))
 
 
 def resolve_transcription_paths_for_chunk(
@@ -414,10 +463,7 @@ def rstrip_line_text(value: object) -> object:
 
 
 def line_text(line: dict) -> str:
-    value = line.get('text', '')
-    if not isinstance(value, str):
-        return ''
-    return value.rstrip()
+    return LineRecord.from_object(line).text()
 
 
 def load_page_images(pdf_path: Path) -> list[Image.Image]:
@@ -480,18 +526,11 @@ def normalized_center_y_for_line(line: dict) -> float | None:
 
 
 def line_confidence_label(line: dict) -> str | None:
-    value = line.get('confidence_label')
-    if not isinstance(value, str):
-        return None
-    label = value.strip().lower()
-    if label not in {'low', 'medium', 'high'}:
-        return None
-    return label
+    return LineRecord.from_object(line).confidence_label()
 
 
 def line_notes(line: dict) -> str:
-    value = line.get('notes', '')
-    return value if isinstance(value, str) else ''
+    return LineRecord.from_object(line).notes()
 
 
 class ChunkLinesSession:
@@ -502,6 +541,7 @@ class ChunkLinesSession:
         self.page_images: list[Image.Image] = []
         self.payload: dict = {}
         self.lines: list = []
+        self.line_records: list[LineRecord] = []
         self.editable_indices: list[int] = []
         self.editable_ridx: int = 0
         self.dirty: bool = False
@@ -554,6 +594,7 @@ class ChunkLinesSession:
         self.page_images = page_images
         self.payload = payload
         self.lines = lines
+        self.line_records = [LineRecord.from_object(line) for line in lines]
         self.editable_indices = indices
         self.editable_ridx = 0
         self.dirty = False
@@ -573,9 +614,9 @@ class ChunkLinesSession:
         self.original_editable_texts = {}
         for idx in self.editable_indices:
             if idx < len(raw_lines) and isinstance(raw_lines[idx], dict):
-                baseline = line_text(raw_lines[idx])
+                baseline = LineRecord.from_object(raw_lines[idx]).text()
             else:
-                baseline = line_text(self.lines[idx])
+                baseline = self.line_records[idx].text()
             self.original_editable_texts[idx] = baseline
         self.refresh_reviewer_changed_flags()
 
@@ -600,7 +641,7 @@ class ChunkLinesSession:
         """Write ``text`` into ``payload['lines']`` for the current editable index."""
         self.clamp_editable_ridx()
         idx = self.editable_indices[self.editable_ridx]
-        self.lines[idx]['text'] = rstrip_line_text(text)
+        self.line_records[idx].set_text(text)
 
     def save_to_final(self) -> None:
         if self.paths is None:
@@ -616,18 +657,18 @@ class ChunkLinesSession:
     def refresh_reviewer_changed_flags(self) -> None:
         for idx in self.editable_indices:
             baseline = self.original_editable_texts.get(idx, '')
-            current = line_text(self.lines[idx])
-            self.lines[idx][REVIEWER_CHANGED_KEY] = current != baseline
+            current = self.line_records[idx].text()
+            self.line_records[idx].set_reviewer_changed(current != baseline)
 
     def low_confidence_unchanged_stats(self) -> tuple[int, int]:
         total_low = 0
         unchanged_low = 0
         for idx in self.editable_indices:
-            line = self.lines[idx]
-            if line_confidence_label(line) != 'low':
+            line = self.line_records[idx]
+            if line.confidence_label() != 'low':
                 continue
             total_low += 1
-            if not bool(line.get(REVIEWER_CHANGED_KEY, False)):
+            if not line.reviewer_changed():
                 unchanged_low += 1
         return unchanged_low, total_low
 
@@ -635,9 +676,11 @@ class ChunkLinesSession:
         """Reload ``payload`` from the raw JSON path on disk. Returns error or ``None``."""
         raw = Path(self.source_raw_path)
         previous_lines = self.lines if isinstance(self.lines, list) else []
+        previous_records = [LineRecord.from_object(line) for line in previous_lines]
         self.payload = json.loads(raw.read_text(encoding='utf-8'))
         self.lines = self.payload['lines']
-        self._restore_confidence_metadata_from_previous(previous_lines)
+        self.line_records = [LineRecord.from_object(line) for line in self.lines]
+        self._restore_confidence_metadata_from_previous(previous_records)
         self.editable_indices = editable_line_indices(self.lines)
         if not self.editable_indices:
             return 'No editable lines after reload.'
@@ -647,33 +690,27 @@ class ChunkLinesSession:
         self._init_review_metadata(self.payload)
         return None
 
-    def _restore_confidence_metadata_from_previous(self, previous_lines: list) -> None:
+    def _restore_confidence_metadata_from_previous(self, previous_lines: list[LineRecord]) -> None:
         """Keep confidence warnings stable across raw reloads."""
         # First pass: restore by absolute line index when layouts match.
-        for idx, line in enumerate(self.lines):
-            if not isinstance(line, dict):
-                continue
+        for idx, line in enumerate(self.line_records):
             if idx >= len(previous_lines):
                 continue
             prev_line = previous_lines[idx]
-            if not isinstance(prev_line, dict):
-                continue
-            if 'confidence_label' in prev_line:
-                line['confidence_label'] = prev_line.get('confidence_label')
-            if 'notes' in prev_line:
-                line['notes'] = prev_line.get('notes')
+            prev_label = prev_line.confidence_label()
+            if prev_label is not None:
+                line.data['confidence_label'] = prev_label
+            line.data['notes'] = prev_line.notes()
 
         # Second pass: restore by editable-line order to absorb marker/index drift.
-        prev_editable = editable_line_indices(previous_lines)
-        curr_editable = editable_line_indices(self.lines)
+        prev_editable = [i for i, record in enumerate(previous_lines) if record.is_editable()]
+        curr_editable = [i for i, record in enumerate(self.line_records) if record.is_editable()]
         for ridx, curr_idx in enumerate(curr_editable):
             if ridx >= len(prev_editable):
                 break
-            curr_line = self.lines[curr_idx]
+            curr_line = self.line_records[curr_idx]
             prev_line = previous_lines[prev_editable[ridx]]
-            if not isinstance(curr_line, dict) or not isinstance(prev_line, dict):
-                continue
-            if 'confidence_label' in prev_line:
-                curr_line['confidence_label'] = prev_line.get('confidence_label')
-            if 'notes' in prev_line:
-                curr_line['notes'] = prev_line.get('notes')
+            prev_label = prev_line.confidence_label()
+            if prev_label is not None:
+                curr_line.data['confidence_label'] = prev_label
+            curr_line.data['notes'] = prev_line.notes()

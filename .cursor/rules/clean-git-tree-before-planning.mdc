@@ -1,0 +1,17 @@
+---
+description: Require clean git tree before creating plans
+alwaysApply: true
+---
+
+# Clean Working Tree Before Planning
+
+Before generating a multi-step implementation plan:
+
+1. Run `git status --porcelain`.
+2. If the output is non-empty, do not create a plan yet.
+3. Tell the user the working tree is not clean and ask whether to:
+   - continue anyway, or
+   - clean/stash/commit changes first.
+4. Only generate the plan when the working tree is clean, or when the user explicitly asks to proceed despite a dirty tree.
+
+Keep this guardrail strict and explicit so planning does not accidentally assume a clean baseline.

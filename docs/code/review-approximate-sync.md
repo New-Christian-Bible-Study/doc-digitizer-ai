@@ -1,6 +1,6 @@
 # Review Approximate Sync
 
-This document captures implementation details for the `review-chunk-lines.py` rewrite.
+This document captures implementation details for the `review-chunk.py` rewrite.
 
 ## Overview
 

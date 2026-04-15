@@ -59,7 +59,7 @@ By default, chunk PDFs live under `<working-dir>/chunk-pdfs/`. These tools also 
 
 - **`transcribe-chunk.py`** — read chunk PDFs from the given directory.
 - **`generate-chunk.py`** — write extracted chunks to the given directory.
-- **`review-chunk-lines.py`** — list and load chunk PDFs from the given directory.
+- **`review-chunk.py`** — list and load chunk PDFs from the given directory.
 - **`tests/chunk-lines-boxes-export.py`** — rasterize the chunk PDF from the given directory (run from `prompt-based/`).
 
 Path rules:
@@ -141,7 +141,7 @@ python prompt-based/transcribe-chunk.py --working-dir prompt-based/tests/test-1
 
 ## Review and correct transcriptions (human pass)
 
-This step does **not** call the model. You still run `transcribe-chunk.py` first (Pass 1) to produce `transcriptions/<stem>_raw.json`. The PySide6 app (`review-chunk-lines.py`) loads that JSON, shows each line’s crop next to editable text, and saves `transcriptions/<stem>_final.json`.
+This step does **not** call the model. You still run `transcribe-chunk.py` first (Pass 1) to produce `transcriptions/<stem>_raw.json`. The PySide6 app (`review-chunk.py`) loads that JSON, shows each line’s crop next to editable text, and saves `transcriptions/<stem>_final.json`.
 
 **System dependency:** [Poppler](https://poppler.freedesktop.org/) must be installed so `pdf2image` can rasterize the PDF (on Ubuntu: `sudo apt install poppler-utils`).
 
@@ -150,7 +150,7 @@ The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in
 `--working-dir` is the same as for `transcribe-chunk.py`: the directory that holds `transcriptions/` and usually `source-pdfs/` / config (not those subfolders themselves). Chunk PDFs default to `<working-dir>/chunk-pdfs/` unless you pass **`--chunk-dir`**.
 
 ```bash
-python review-chunk-lines.py --working-dir .
+python review-chunk.py --working-dir .
 ```
 
 Pick the chunk from the **Chunk** dropdown (PDFs in the chunk directory).
@@ -158,12 +158,12 @@ Pick the chunk from the **Chunk** dropdown (PDFs in the chunk directory).
 Example using the `tests/test-1` fixture (after the chunk file and `tests/test-1/transcriptions/..._raw.json` exist):
 
 ```bash
-python prompt-based/review-chunk-lines.py --working-dir prompt-based/tests/test-1
+python prompt-based/review-chunk.py --working-dir prompt-based/tests/test-1
 ```
 
 - `--raw-json` is optional; defaults to `<working-dir>/transcriptions/<stem>_raw.json`. Relative paths are resolved under `--working-dir`.
 - If `_final.json` already exists for that stem, it is loaded so you can resume editing.
-- **Quit:** Close the window, or press Ctrl-C in the terminal (the app installs a handler so this works with Qt). If the process is stuck, from another terminal: `pkill -f review-chunk-lines.py` or `kill <pid>` (`kill -9` only as a last resort).
+- **Quit:** Close the window, or press Ctrl-C in the terminal (the app installs a handler so this works with Qt). If the process is stuck, from another terminal: `pkill -f review-chunk.py` or `kill <pid>` (`kill -9` only as a last resort).
 
 ## Transcription JSON to AsciiDoc
 
@@ -196,4 +196,4 @@ Developer-oriented content (tests, fixtures, implementation notes) is in [`docs/
 
 See also [`tests/README.md`](tests/README.md) for torture OCR integration tests.
 
-The helper script `tests/chunk-lines-boxes-export.py` supports **`--chunk-dir`** the same way as `review-chunk-lines.py` when exporting box overlays for debugging.
+The helper script `tests/chunk-lines-boxes-export.py` supports **`--chunk-dir`** the same way as `review-chunk.py` when exporting box overlays for debugging.

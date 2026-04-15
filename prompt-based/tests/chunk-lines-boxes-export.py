@@ -4,7 +4,7 @@ Export full-page rasters with line box outlines (same geometry as review-chunk-l
 
   python tests/chunk-lines-boxes-export.py --working-dir <dir>   # from prompt-based/
 
-Uses ``--working-dir`` like transcribe-chunk.py / review-chunk-lines.py. Without
+Uses ``--working-dir`` like transcribe-chunk.py / review-chunk.py. Without
 ``--raw-json``, pick a ``transcriptions/*_raw.json`` interactively (arrow keys). Use
 ``--raw-json`` when stdin is not a TTY (CI / scripts).
 """

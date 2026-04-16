@@ -19,7 +19,9 @@ from PIL import Image
 # differ slightly — ``box_2d`` crops in the UI are best-effort vs page aspect ratio.
 REVIEW_PDF_RASTER_DPI = 200
 
-# Normalized coordinate grid for ``box_2d`` (Pass 1 / model convention).
+# Normalized coordinate grid for ``box_2d`` (Pass 1 / model convention). The reviewer
+# maps ``ymin``/``ymax`` to the page pixmap for vertical centering and uses the full
+# quad for the highlight rectangle.
 BOX_2D_NORMALIZED_MAX = 1000
 
 # Padding around the clamped model box for line crops (preview comfort). Too much
@@ -362,6 +364,15 @@ def _moving_average(values: list[int], radius: int) -> list[float]:
 
 def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | None:
     """Snap model ``box_2d`` to nearest visible text band using a local projection profile."""
+    # Driver (motivation is in the module comment above SNAP_* constants):
+    # - Build a 1D "projection profile": per-row dark-pixel counts in a strip that
+    #   spans the model's x-range and only a limited y-range around the box center.
+    # - Smooth counts, drop rows below min_dark_pixels (weak ink / noise floor).
+    # - Choose a peak row by maximizing (smoothed - 0.02 * |row_y - anchor_y|) so
+    #   equally dark nearby rows still prefer the model anchor (see loop below).
+    # - Grow ymin/ymax from that peak while smoothed stays above a fraction of the
+    #   peak (SNAP_VALLEY_RATIO); map the band back to normalized ymin/ymax only.
+    # - xmin/xmax are not adjusted here; horizontal alignment stays model-derived.
     parsed = _parse_box_2d(box_2d)
     if parsed is None:
         return None
@@ -428,7 +439,7 @@ def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | N
         return None
 
     peak_value = smoothed[peak_idx]
-    # Use a relative valley threshold so band growth adapts across faint/dark scans.
+    # Fraction-of-peak cutoff: same relative shape works on faint vs dark scans.
     valley_threshold = max(1.0, peak_value * SNAP_VALLEY_RATIO)
 
     band_top = peak_idx
@@ -468,11 +479,14 @@ def line_text(line: dict) -> str:
 
 def load_page_images(pdf_path: Path) -> list[Image.Image]:
     """Rasterize each PDF page to a PIL image at :data:`REVIEW_PDF_RASTER_DPI`."""
+    # Snap-to-ink and the line reviewer both consume these rasters; keep DPI in one place
+    # so ``box_2d`` written at transcription time matches review pixmap geometry.
     return convert_from_path(str(pdf_path), dpi=REVIEW_PDF_RASTER_DPI)
 
 
 def load_payload(raw_path: Path, final_path: Path) -> dict:
     # Prefer final when it exists so reopening the chunk loads saved review work, not stale raw.
+    # Line sync reads ``lines[].box_2d`` / ``page_number`` from this payload as-is.
     if final_path.exists():
         return json.loads(final_path.read_text(encoding='utf-8'))
     return json.loads(raw_path.read_text(encoding='utf-8'))
@@ -492,6 +506,8 @@ def crop_for_line(
     line: dict,
 ) -> tuple[Image.Image | None, str | None]:
     """Build a PIL crop for one payload line, or return (None, error_message)."""
+    # Same ``page_number`` / ``box_2d`` contract as the line reviewer; padding is only
+    # from ``clamp_box_2d_to_pixels``, not the review UI's highlight expansion.
     page_number = line.get('page_number')
     box_2d = line.get('box_2d')
     n_pages = len(page_images)
@@ -514,6 +530,7 @@ def crop_for_line(
 
 def normalized_center_y_for_line(line: dict) -> float | None:
     """Return line vertical center on the 0-1000 grid, or ``None`` if invalid."""
+    # Drives reviewer vertical scroll only; ``xmin``/``xmax`` are ignored here.
     box_2d = line.get('box_2d')
     if not isinstance(box_2d, list) or len(box_2d) != 4:
         return None
@@ -573,6 +590,7 @@ class ChunkLinesSession:
         # On failure below (or invalid payload), return without mutating ``self`` so a
         # previously loaded chunk remains active (do not clear the session at the start).
         try:
+            # ``page_images`` and ``lines[].box_2d`` share the ``REVIEW_PDF_RASTER_DPI`` space.
             page_images = load_page_images(resolved.chunk_path)
             payload = load_payload(resolved.raw_path, resolved.final_path)
             raw_payload = load_raw_payload(resolved.raw_path)

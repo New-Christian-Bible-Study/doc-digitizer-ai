@@ -397,12 +397,15 @@ class ReviewMainWindow(QMainWindow):
     def center_page_on_normalized_y(self, normalized_y: float) -> None:
         if self._page_pixmap is None or self._page_pixmap.isNull():
             return
+        # Usually ``(ymin+ymax)/2`` from ``normalized_center_y_for_line`` (0..1000 grid).
         self._last_center_y = normalized_y
         page_h = self._page_pixmap.height()
         target_y = int((normalized_y / float(BOX_2D_NORMALIZED_MAX)) * page_h)
         self._smooth_center_on_y(target_y)
 
     def show_active_line_box(self, line: dict) -> None:
+        # Overlay padding is for human-friendly hints only. Crop padding for PIL lives
+        # in ``chunk_lines_model.clamp_box_2d_to_pixels`` (used by ``crop_for_line``).
         if self._page_pixmap is None or self._page_pixmap.isNull():
             self._active_line_box_item.setVisible(False)
             return
@@ -649,6 +652,8 @@ class ReviewChunkLinesController:
         return True
 
     def _show_line(self) -> None:
+        # Line/image sync uses only persisted ``page_number`` and ``box_2d``; no OCR
+        # or re-snap at focus time.
         self._session.clamp_editable_ridx()
         s = self._session
         n_editable = len(s.editable_indices)

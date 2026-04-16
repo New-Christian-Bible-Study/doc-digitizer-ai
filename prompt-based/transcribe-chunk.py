@@ -402,6 +402,8 @@ def build_full_transcription_payload(
 
 def snap_line_boxes_to_ink(chunk_path: Path, lines: list[dict]) -> str | None:
     """Replace each line's ``box_2d`` with snap-to-ink bounds when detection succeeds."""
+    # Only automated step that mutates ``box_2d`` before review (aside from manual
+    # JSON edits). Reviewer UI reads boxes as-is from ``*_raw.json`` / ``*_final.json``.
     try:
         # Raster once per chunk so --all mode does not re-render per line.
         page_images = load_page_images(chunk_path)

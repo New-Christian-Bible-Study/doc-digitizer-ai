@@ -95,7 +95,7 @@ Review maps that grid to the current page pixmap size. Vertical centering uses `
 
 ## Box Adjustment (snap-to-ink)
 
-**Why:** VLM `box_2d` is a coarse layout hint (patch-based estimates can drift, merge, or skip lines). Snap-to-ink uses a **local** vertical ink profile so review scroll/highlight tracks real text bands better. Rationale is spelled out in comments at the top of `chunk_lines_model.py`.
+**Why:** VLM `box_2d` is a coarse layout hint (patch-based estimates can drift, merge, or skip lines). Snap-to-ink uses a **local** vertical ink profile (i.e., it counts the dark pixels across each horizontal row to mathematically find the densest "peak" of the actual text band) so review scroll/highlight tracks real text bands better. Rationale is spelled out in comments at the top of `chunk_lines_model.py`.
 
 **What:** `snap_line_boxes_to_ink()` in `transcribe-chunk.py` calls `snap_box_2d_to_ink()` per line. On success it replaces `line['box_2d']`; on failure the model box is left unchanged. **Only vertical bounds are snapped; horizontal `xmin`/`xmax` stay as returned by the model.** Details (thresholds, peak pick, valley growth) live in `snap_box_2d_to_ink()`.
 

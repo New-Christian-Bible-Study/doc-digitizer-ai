@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import signal
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from PySide6.QtGui import QColor, QIcon, QImage, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFileDialog,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
@@ -41,6 +43,8 @@ from chunk_lines_model import (
     normalized_center_y_for_line,
     resolve_chunk_pdf_dir,
 )
+
+REVIEW_CHUNK_STATE_FILENAME = '.review-chunk-state.json'
 
 
 def pil_to_qpixmap(im: Image.Image) -> QPixmap:
@@ -105,6 +109,62 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     return parser.parse_args(argv)
+
+
+def _has_review_chunk_state(root: Path) -> bool:
+    return (root / REVIEW_CHUNK_STATE_FILENAME).is_file()
+
+
+def _pick_transcription_root_with_dialog(default_root: Path) -> Path | None:
+    if not _can_show_transcription_root_dialog():
+        return None
+
+    while True:
+        dialog = QFileDialog(
+            None,
+            f'Select transcription root containing {REVIEW_CHUNK_STATE_FILENAME}',
+            str(default_root),
+        )
+        dialog.setFileMode(QFileDialog.Directory)
+        dialog.setOption(QFileDialog.ShowDirsOnly, True)
+        # Avoid native platform dialog integration, which can segfault on some Linux setups.
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        if dialog.exec() != QFileDialog.Accepted:
+            return None
+        selected_paths = dialog.selectedFiles()
+        if not selected_paths:
+            return None
+        candidate = Path(selected_paths[0]).resolve()
+
+        if not candidate.is_dir():
+            print(f'Not a directory: {candidate}', file=sys.stderr)
+            continue
+        if not _has_review_chunk_state(candidate):
+            print(
+                f'Missing {REVIEW_CHUNK_STATE_FILENAME} in {candidate}',
+                file=sys.stderr,
+            )
+            continue
+        return candidate
+
+
+def _can_show_transcription_root_dialog() -> bool:
+    if not sys.stdin.isatty() and not sys.stdout.isatty():
+        return False
+    if not sys.platform.startswith('linux'):
+        return True
+
+    # Guard against common invalid values that can crash Qt initialization.
+    display = (os.environ.get('DISPLAY') or '').strip()
+    wayland = (os.environ.get('WAYLAND_DISPLAY') or '').strip()
+    if not display and not wayland:
+        return False
+    invalid_display_tokens = {'$0', '0', 'false', 'none', 'null'}
+    if display.lower() in invalid_display_tokens:
+        return False
+    if wayland.lower() in invalid_display_tokens:
+        return False
+    return True
 
 
 class ReviewMainWindow(QMainWindow):
@@ -772,7 +832,37 @@ class ReviewChunkLinesController:
 
 def main() -> int:
     cli = parse_cli_args()
+    has_chunk_dir = cli.chunk_dir is not None
+    has_transcriptions_dir = cli.transcriptions_dir is not None
+    if has_chunk_dir != has_transcriptions_dir:
+        print(
+            'Pass --chunk-dir and --transcriptions-dir together, or pass neither.',
+            file=sys.stderr,
+        )
+        return 2
+
     working_dir = cli.working_dir.resolve()
+    if not has_chunk_dir and not has_transcriptions_dir and not _has_review_chunk_state(working_dir):
+        prompted_root: Path | None = None
+        if _can_show_transcription_root_dialog():
+            app_for_picker = QApplication.instance()
+            created_picker_app = False
+            if app_for_picker is None:
+                app_for_picker = QApplication(sys.argv)
+                created_picker_app = True
+            prompted_root = _pick_transcription_root_with_dialog(working_dir)
+            if created_picker_app:
+                app_for_picker.quit()
+        if prompted_root is None:
+            print(
+                f'Could not resolve transcription root: {working_dir} is missing '
+                f'{REVIEW_CHUNK_STATE_FILENAME}. Select a valid root in the file dialog '
+                'or pass both --chunk-dir and --transcriptions-dir.',
+                file=sys.stderr,
+            )
+            return 2
+        working_dir = prompted_root
+
     chunk_pdf_dir = resolve_chunk_pdf_dir(working_dir, cli.chunk_dir)
     if not chunk_pdf_dir.is_dir():
         print(
@@ -788,7 +878,9 @@ def main() -> int:
         print(f'No .pdf files found in {chunk_pdf_dir}', file=sys.stderr)
         return 1
 
-    app = QApplication(sys.argv)
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
     app.setApplicationName('Line review')
     _ic = _review_app_icon()
     if not _ic.isNull():

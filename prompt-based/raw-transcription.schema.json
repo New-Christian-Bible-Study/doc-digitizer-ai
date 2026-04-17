@@ -57,10 +57,6 @@
       "enum": ["low", "medium", "high"],
       "description": "Human-readable confidence level"
     },
-    "notes": {
-      "type": "string",
-      "description": "Deprecated top-level notes field kept for backward compatibility"
-    },
     "model": {
       "type": "string",
       "description": "LiteLLM model id used for Pass 1 (stored in saved *_raw.json by transcribe-chunk.py)"

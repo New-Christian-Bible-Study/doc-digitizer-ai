@@ -183,7 +183,6 @@
   ],
   "confidence_score": 0.99,
   "confidence_label": "high",
-  "notes": "",
   "model": "gemini/gemini-3.1-pro-preview",
   "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
 }

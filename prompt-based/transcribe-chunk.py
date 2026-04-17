@@ -377,8 +377,6 @@ def build_llm_payload_for_validation(raw: dict) -> dict:
         'lines': normalize_lines_from_model(raw.get('lines')),
         'confidence_score': raw.get('confidence_score'),
         'confidence_label': raw.get('confidence_label'),
-        # Retained for backward compatibility while line-level notes are preferred.
-        'notes': raw.get('notes', ''),
     }
 
 
@@ -390,7 +388,6 @@ def build_full_transcription_payload(
         'lines': llm_payload['lines'],
         'confidence_score': llm_payload['confidence_score'],
         'confidence_label': llm_payload['confidence_label'],
-        'notes': llm_payload.get('notes', ''),
         'model': transcribe_config['model'],
         'configuration': (
             f'temperature={transcribe_config["temperature"]}, '
@@ -523,12 +520,10 @@ def build_ai_summary_markdown(
     transcribe_config_text: str,
     confidence_score: object,
     confidence_label: object,
-    notes: object,
     prompt_text: str,
 ) -> str:
     confidence_score_text = '' if confidence_score is None else str(confidence_score)
     confidence_label_text = '' if confidence_label is None else str(confidence_label)
-    notes_text = '' if notes is None else str(notes)
 
     return (
         '# AI transcription summary\n\n'
@@ -536,7 +531,6 @@ def build_ai_summary_markdown(
         f'- Total pages: `{total_pages}`\n'
         f'- Confidence score: `{confidence_score_text}`\n'
         f'- Confidence label: `{confidence_label_text}`\n'
-        f'- Notes: {notes_text}\n'
         '## Transcribe config used\n\n'
         '```json\n'
         f'{transcribe_config_text}\n'
@@ -720,7 +714,6 @@ def transcribe_single_chunk(
             transcribe_config_text=transcribe_config_text,
             confidence_score=payload['confidence_score'],
             confidence_label=payload['confidence_label'],
-            notes=payload['notes'],
             prompt_text=prompt_text,
         ),
         encoding='utf-8',

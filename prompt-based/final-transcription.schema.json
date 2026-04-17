@@ -65,10 +65,6 @@
       "type": "boolean",
       "description": "True only when a human reviewer marked this file as fully reviewed."
     },
-    "notes": {
-      "type": "string",
-      "description": "Deprecated top-level notes field kept for backward compatibility"
-    },
     "model": {
       "type": "string",
       "description": "LiteLLM model id used for Pass 1 (stored in saved *_raw.json by transcribe-chunk.py)"

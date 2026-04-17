@@ -44,7 +44,7 @@ from chunk_lines_model import (
     resolve_chunk_pdf_dir,
 )
 
-REVIEW_CHUNK_STATE_FILENAME = '.review-chunk-state.json'
+CHUNK_STATE_FILENAME = '.chunk-state.json'
 
 
 def pil_to_qpixmap(im: Image.Image) -> QPixmap:
@@ -112,7 +112,7 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _has_review_chunk_state(root: Path) -> bool:
-    return (root / REVIEW_CHUNK_STATE_FILENAME).is_file()
+    return (root / CHUNK_STATE_FILENAME).is_file()
 
 
 def _pick_transcription_root_with_dialog(default_root: Path) -> Path | None:
@@ -122,7 +122,7 @@ def _pick_transcription_root_with_dialog(default_root: Path) -> Path | None:
     while True:
         dialog = QFileDialog(
             None,
-            f'Select transcription root containing {REVIEW_CHUNK_STATE_FILENAME}',
+            f'Select transcription root containing {CHUNK_STATE_FILENAME}',
             str(default_root),
         )
         dialog.setFileMode(QFileDialog.Directory)
@@ -141,7 +141,7 @@ def _pick_transcription_root_with_dialog(default_root: Path) -> Path | None:
             continue
         if not _has_review_chunk_state(candidate):
             print(
-                f'Missing {REVIEW_CHUNK_STATE_FILENAME} in {candidate}',
+                f'Missing {CHUNK_STATE_FILENAME} in {candidate}',
                 file=sys.stderr,
             )
             continue
@@ -856,7 +856,7 @@ def main() -> int:
         if prompted_root is None:
             print(
                 f'Could not resolve transcription root: {working_dir} is missing '
-                f'{REVIEW_CHUNK_STATE_FILENAME}. Select a valid root in the file dialog '
+                f'{CHUNK_STATE_FILENAME}. Select a valid root in the file dialog '
                 'or pass both --chunk-dir and --transcriptions-dir.',
                 file=sys.stderr,
             )

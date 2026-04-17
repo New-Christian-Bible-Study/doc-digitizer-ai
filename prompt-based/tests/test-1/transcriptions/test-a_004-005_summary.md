@@ -10,6 +10,7 @@
 - Total tokens: `4769`
 - Confidence score: `1.0`
 - Confidence label: `high`
+- Number of notes: `0`
 ## Transcribe config used
 
 ```json

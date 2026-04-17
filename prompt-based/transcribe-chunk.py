@@ -520,10 +520,16 @@ def build_ai_summary_markdown(
     transcribe_config_text: str,
     confidence_score: object,
     confidence_label: object,
+    lines: list[dict[str, object]],
     prompt_text: str,
 ) -> str:
     confidence_score_text = '' if confidence_score is None else str(confidence_score)
     confidence_label_text = '' if confidence_label is None else str(confidence_label)
+    note_count = sum(
+        1
+        for line in lines
+        if isinstance(line.get('notes'), str) and line['notes'].strip()
+    )
 
     return (
         '# AI transcription summary\n\n'
@@ -531,6 +537,7 @@ def build_ai_summary_markdown(
         f'- Total pages: `{total_pages}`\n'
         f'- Confidence score: `{confidence_score_text}`\n'
         f'- Confidence label: `{confidence_label_text}`\n'
+        f'- Number of notes: `{note_count}`\n'
         '## Transcribe config used\n\n'
         '```json\n'
         f'{transcribe_config_text}\n'
@@ -714,6 +721,7 @@ def transcribe_single_chunk(
             transcribe_config_text=transcribe_config_text,
             confidence_score=payload['confidence_score'],
             confidence_label=payload['confidence_label'],
+            lines=payload['lines'],
             prompt_text=prompt_text,
         ),
         encoding='utf-8',

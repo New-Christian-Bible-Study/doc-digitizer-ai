@@ -252,6 +252,7 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
     assert '- Prompt tokens (input): `' not in ai_summary
     assert '- Completion tokens (output): `' not in ai_summary
     assert '- Total tokens: `' not in ai_summary
+    assert '- Number of notes: `0`' in ai_summary
 
 
 def test_main_with_chunk_dir_outside_working_dir(tmp_path: Path, monkeypatch, capsys):

@@ -60,4 +60,5 @@ def assert_common_ai_summary_fields(ai_summary_text: str, chunk_filename: str):
     assert '"sys_instructions":' in ai_summary_text
     assert '- Confidence score: `' in ai_summary_text
     assert '- Confidence label: `' in ai_summary_text
+    assert '- Number of notes: `' in ai_summary_text
     assert '## Prompt used' in ai_summary_text

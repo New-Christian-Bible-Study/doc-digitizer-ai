@@ -4,6 +4,7 @@
 - Total pages: `3`
 - Confidence score: `1.0`
 - Confidence label: `high`
+- Number of notes: `0`
 ## Transcribe config used
 
 ```json

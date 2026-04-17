@@ -45,6 +45,8 @@ from chunk_lines_model import (
 )
 
 CHUNK_STATE_FILENAME = '.chunk-state.json'
+DEFAULT_WINDOW_WIDTH = 1100
+DEFAULT_WINDOW_HEIGHT = 750
 
 
 def pil_to_qpixmap(im: Image.Image) -> QPixmap:
@@ -210,7 +212,7 @@ class ReviewMainWindow(QMainWindow):
         _ic = _review_app_icon()
         if not _ic.isNull():
             self.setWindowIcon(_ic)
-        self.resize(880, 480)
+        self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
 
         central = QWidget()
         self.setCentralWidget(central)

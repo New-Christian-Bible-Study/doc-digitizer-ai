@@ -458,6 +458,25 @@ def extract_usage_tokens(response) -> tuple[object, object, object]:
     )
 
 
+def describe_output_token_limit_hit(response) -> str | None:
+    """If the provider stopped for max output tokens, return an explanatory message."""
+    try:
+        choice = response.choices[0]
+    except (IndexError, AttributeError, TypeError, KeyError):
+        return None
+    finish_reason = getattr(choice, 'finish_reason', None)
+    if finish_reason is None:
+        return None
+    if str(finish_reason).strip().lower() != 'length':
+        return None
+    return (
+        'The API set finish_reason to "length" (max output tokens). '
+        'Generation stopped at the output limit, so the model text is often cut mid-JSON '
+        'and json.loads fails. Increase max_tokens on the litellm.completion() call, '
+        'or split the chunk into smaller PDFs.'
+    )
+
+
 def format_token_log_value(value: object) -> str:
     if value is None:
         return '(not reported)'
@@ -662,6 +681,9 @@ def transcribe_single_chunk(
             content=content,
         )
         print(f'Error parsing model response JSON: {exc}', file=sys.stderr)
+        token_limit_msg = describe_output_token_limit_hit(response)
+        if token_limit_msg:
+            print(token_limit_msg, file=sys.stderr)
         excerpt = build_json_error_excerpt(
             text='' if content is None else str(content),
             exc=exc,

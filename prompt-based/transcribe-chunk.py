@@ -143,7 +143,7 @@ def resolve_chunk_filename(working_dir: Path, chunk_pdf_dir: Path) -> str:
     except ValueError:
         state = {}
 
-    last_generated = state.get('last_generated_output')
+    last_generated = state.get('last_chunk_generated')
     default_filename = ''
     if isinstance(last_generated, str) and last_generated.strip():
         default_filename = Path(last_generated).name

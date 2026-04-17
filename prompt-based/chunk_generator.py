@@ -125,7 +125,7 @@ class ChunkGenerator:
         state = self.load_state()
         state['last_source_filename'] = source_filename
         state['last_end_page'] = end_page
-        state['last_generated_output'] = str(output)
+        state['last_chunk_generated'] = str(output)
         state['updated_at'] = datetime.now(timezone.utc).isoformat()
         self.save_state(state)
 

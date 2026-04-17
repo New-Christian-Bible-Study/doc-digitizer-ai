@@ -64,7 +64,7 @@ def test_create_chunk_extracts_expected_pages_and_updates_state(tmp_path: Path):
     state = generator.load_state()
     assert state['last_source_filename'] == 'book-a.pdf'
     assert state['last_end_page'] == 4
-    assert state['last_generated_output'].endswith('book-a_002-004.pdf')
+    assert state['last_chunk_generated'].endswith('book-a_002-004.pdf')
 
 
 def test_create_chunk_validates_end_page_within_source(tmp_path: Path):

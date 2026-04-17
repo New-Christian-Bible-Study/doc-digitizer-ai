@@ -127,7 +127,7 @@ python prompt-based/transcribe-chunk.py --working-dir prompt-based/tests/test-1
 
 - `transcriptions/` is created automatically if it does not exist.
 - `--chunk-dir` is optional. If omitted, chunks are read from `<working-dir>/chunk-pdfs/`.
-- `--chunk` is optional. If omitted, you choose from the chunk directory interactively. The default selection uses `.chunk-state.json` (`last_generated_output`) when available.
+- `--chunk` is optional. If omitted, you choose from the chunk directory interactively. The default selection uses `.chunk-state.json` (`last_chunk_generated`) when available.
 - `--chunk` must be a filename only (no path).
 - `--prompt-md` is optional. If omitted, the script searches for `*prompt*.md` in the working directory:
   - if exactly one file matches, it is used automatically

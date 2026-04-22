@@ -166,7 +166,7 @@ class LineRecord:
     def set_text(self, value: str) -> None:
         self.data['text'] = value.rstrip()
 
-    def confidence_label(self) -> str | None:
+    def ai_confidence_label(self) -> str | None:
         value = self.data.get('ai_confidence_label')
         if not isinstance(value, str):
             return None
@@ -175,7 +175,7 @@ class LineRecord:
             return None
         return label
 
-    def notes(self) -> str:
+    def ai_notes(self) -> str:
         value = self.data.get('ai_notes', '')
         return value if isinstance(value, str) else ''
 
@@ -572,11 +572,11 @@ def normalized_center_y_for_line(line: dict) -> float | None:
 
 
 def line_confidence_label(line: dict) -> str | None:
-    return LineRecord.from_object(line).confidence_label()
+    return LineRecord.from_object(line).ai_confidence_label()
 
 
 def line_notes(line: dict) -> str:
-    return LineRecord.from_object(line).notes()
+    return LineRecord.from_object(line).ai_notes()
 
 
 class ChunkLinesSession:
@@ -718,7 +718,7 @@ class ChunkLinesSession:
         unchanged_low = 0
         for idx in self.editable_indices:
             line = self.line_records[idx]
-            if line.confidence_label() != 'low':
+            if line.ai_confidence_label() != 'low':
                 continue
             total_low += 1
             if not line.reviewer_changed():
@@ -750,10 +750,10 @@ class ChunkLinesSession:
             if idx >= len(previous_lines):
                 continue
             prev_line = previous_lines[idx]
-            prev_label = prev_line.confidence_label()
+            prev_label = prev_line.ai_confidence_label()
             if prev_label is not None:
                 line.data['ai_confidence_label'] = prev_label
-            line.data['ai_notes'] = prev_line.notes()
+            line.data['ai_notes'] = prev_line.ai_notes()
 
         # Second pass: restore by editable-line order to absorb marker/index drift.
         prev_editable = [i for i, record in enumerate(previous_lines) if record.is_editable()]
@@ -763,7 +763,7 @@ class ChunkLinesSession:
                 break
             curr_line = self.line_records[curr_idx]
             prev_line = previous_lines[prev_editable[ridx]]
-            prev_label = prev_line.confidence_label()
+            prev_label = prev_line.ai_confidence_label()
             if prev_label is not None:
                 curr_line.data['ai_confidence_label'] = prev_label
-            curr_line.data['ai_notes'] = prev_line.notes()
+            curr_line.data['ai_notes'] = prev_line.ai_notes()

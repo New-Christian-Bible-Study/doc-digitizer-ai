@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import signal
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QIcon, QImage, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -180,9 +181,13 @@ class ReviewMainWindow(QMainWindow):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+
+        # Where to find chunk PDFs and sibling transcriptions/ on disk.
         self._working_dir = working_dir.resolve()
         self._chunk_pdf_dir = chunk_pdf_dir.resolve()
         self._chunk_filenames = chunk_filenames
+
+        # Right pane: one UI row per editable line; list index is ridx (see ChunkLinesSession).
         self._line_edits: list[FocusLineEdit] = []
         self._line_badges: list[QLabel] = []
         self._line_notes: list[QLabel] = []
@@ -191,10 +196,21 @@ class ReviewMainWindow(QMainWindow):
         self._line_original_texts: list[str] = []
         self._line_conf_labels: list[str] = []
         self._row_indices: list[int] = []
+
+        # Left pane: fitted page pixmap, optional scene padding for bottom-line alignment, zoom.
         self._page_pixmap: QPixmap | None = None
-        self._last_center_y: float | None = None
+        self._page_top_pad: float = 0.0
         self._zoom_factor: float = 1.0
         self._fit_scale: float = 1.0
+
+        # Vertical sync — replay after zoom, splitter, or window resize. Prefer matching
+        # highlight to the active editor (_last_align_ridx + _align_session line dict);
+        # otherwise _last_center_y + normalized_center_y_for_line fallback. _align_generation
+        # invalidates older QTimer.singleShot align callbacks when the user steps lines fast.
+        self._last_center_y: float | None = None
+        self._last_align_ridx: int | None = None
+        self._align_session: ChunkLinesSession | None = None
+        self._align_generation: int = 0
 
         root = self._init_window_shell()
         self._add_chunk_row(root, chunk_filenames)
@@ -379,6 +395,7 @@ class ReviewMainWindow(QMainWindow):
         self._line_original_texts = []
         self._line_conf_labels = []
         self._row_indices = []
+        self._last_align_ridx = None
 
     def populate_lines(self, session: ChunkLinesSession, ctrl: 'ReviewChunkLinesController') -> None:
         self.clear_line_rows()
@@ -448,19 +465,27 @@ class ReviewMainWindow(QMainWindow):
         if page_image is None:
             self._page_item.setPixmap(QPixmap())
             self._page_pixmap = None
+            # Empty left pane: clear vertical-sync replay state, scene padding, and item
+            # offsets so the next page load does not inherit stale scroll alignment.
+            self._page_top_pad = 0.0
+            self._last_align_ridx = None
+            self._last_center_y = None
+            self._page_item.setPos(0.0, 0.0)
+            self._active_line_box_item.setPos(0.0, 0.0)
             self._active_line_box_item.setVisible(False)
+            self._scene.setSceneRect(QRectF(0.0, 0.0, 1.0, 1.0))
             return
         self._page_pixmap = pil_to_qpixmap(page_image)
         self._page_item.setPixmap(self._page_pixmap)
-        self._scene.setSceneRect(self._page_item.boundingRect())
-        # Preserve current zoom when focus changes lines/pages; only Ctrl+0 resets.
-        self._refit_and_restore_focus_center()
+        # Fit + padded scene so bottom lines can align with the transcription row.
+        self._prepare_page_geometry()
 
     def center_page_on_normalized_y(self, normalized_y: float) -> None:
         if self._page_pixmap is None or self._page_pixmap.isNull():
             return
         # Usually ``(ymin+ymax)/2`` from ``normalized_center_y_for_line`` (0..1000 grid).
         self._last_center_y = normalized_y
+        self._last_align_ridx = None
         page_h = self._page_pixmap.height()
         target_y = int((normalized_y / float(BOX_2D_NORMALIZED_MAX)) * page_h)
         self._smooth_center_on_y(target_y)
@@ -518,9 +543,87 @@ class ReviewMainWindow(QMainWindow):
         self._active_line_box_item.setRect(left, top, max(1, right - left), max(1, bottom - top))
         self._active_line_box_item.setVisible(True)
 
+    def align_image_to_active_row(self, ridx: int, line: dict) -> None:
+        """Scroll the page so the highlight lines up with the active line editor vertically."""
+        if self._page_pixmap is None or self._page_pixmap.isNull():
+            return
+        if not (0 <= ridx < len(self._line_edits)):
+            return
+        edit = self._line_edits[ridx]
+        vp = self._page_view.viewport()
+        # ``edit`` lives under the line ``QScrollArea``, not under ``vp``; map via global coords.
+        g = edit.mapToGlobal(edit.rect().center())
+        target_viewport_y = float(vp.mapFromGlobal(g).y())
+
+        if self._active_line_box_item.isVisible():
+            anchor_scene = self._active_line_box_item.mapToScene(
+                self._active_line_box_item.boundingRect().center(),
+            )
+            anchor_y = anchor_scene.y()
+            self._last_align_ridx = ridx
+            self._last_center_y = None
+        else:
+            center = normalized_center_y_for_line(line)
+            if center is None:
+                self._last_align_ridx = None
+                return
+            self._last_align_ridx = None
+            page_h = self._page_pixmap.height()
+            anchor_y = float(
+                int((center / float(BOX_2D_NORMALIZED_MAX)) * page_h),
+            ) + self._page_top_pad
+            self._last_center_y = center
+
+        current_center = self._page_view.mapToScene(vp.rect().center())
+        m22 = self._page_view.transform().m22()
+        if abs(m22) < 1e-6:
+            return
+        vc_y = float(vp.height()) / 2.0
+        center_scene_y = anchor_y - (target_viewport_y - vc_y) / m22
+        self._page_view.centerOn(current_center.x(), center_scene_y)
+
+    def schedule_align_image_to_active_row(self, ridx: int, line: dict) -> None:
+        """Run alignment after the list scrolls so ``mapTo`` sees the final editor position."""
+        self._align_generation += 1
+        gen = self._align_generation
+
+        def run():
+            if gen != self._align_generation:
+                return
+            self.align_image_to_active_row(ridx, line)
+
+        QTimer.singleShot(0, run)
+
+    def _prepare_page_geometry(self) -> None:
+        """Apply width fit, vertical scene padding, and scene rect (no scroll alignment)."""
+        if self._page_pixmap is None or self._page_pixmap.isNull():
+            return
+        self._fit_page_to_pane_width()
+        self._update_scene_vertical_padding()
+
+    def _update_scene_vertical_padding(self) -> None:
+        """Extra scene height so any line can be scrolled to match a transcription row."""
+        if self._page_pixmap is None or self._page_pixmap.isNull():
+            return
+        vp = self._page_view.viewport()
+        m22 = self._page_view.transform().m22()
+        vh = max(1, vp.height())
+        pad = int(math.ceil(vh / max(1e-6, abs(m22)))) + 16
+        page_w = float(self._page_pixmap.width())
+        page_h = float(self._page_pixmap.height())
+        top_pad = float(pad)
+        bot_pad = float(pad)
+        self._page_top_pad = top_pad
+        self._page_item.setPos(0.0, top_pad)
+        self._active_line_box_item.setPos(0.0, top_pad)
+        self._scene.setSceneRect(
+            QRectF(0.0, 0.0, page_w, top_pad + page_h + bot_pad),
+        )
+
     def _smooth_center_on_y(self, y: int) -> None:
+        y_scene = float(y) + self._page_top_pad
         current_center = self._page_view.mapToScene(self._page_view.viewport().rect().center())
-        self._page_view.centerOn(current_center.x(), y)
+        self._page_view.centerOn(current_center.x(), y_scene)
 
     def _fit_page_to_pane_width(self) -> None:
         if self._page_pixmap is None or self._page_pixmap.isNull():
@@ -547,8 +650,33 @@ class ReviewMainWindow(QMainWindow):
 
     def _refit_and_restore_focus_center(self) -> None:
         self._fit_page_to_pane_width()
+        self._update_scene_vertical_padding()
+        if self._last_align_ridx is not None and 0 <= self._last_align_ridx < len(
+            self._line_edits,
+        ):
+            ridx = self._last_align_ridx
+            pidx = self._row_indices[ridx] if ridx < len(self._row_indices) else None
+            # Row index must stay valid across reloads; guard payload index.
+            if pidx is not None:
+                line = self._session_line_for_align(ridx, pidx)
+                if line is not None:
+                    self.align_image_to_active_row(ridx, line)
+                    return
         if self._last_center_y is not None:
             self.center_page_on_normalized_y(self._last_center_y)
+
+    def _session_line_for_align(self, ridx: int, payload_idx: int) -> dict | None:
+        """Narrow hook for re-alignment after resize/zoom; session set by controller."""
+        session = self._align_session
+        if session is None or not session.is_loaded:
+            return None
+        lines = session.lines
+        if not (0 <= payload_idx < len(lines)):
+            return None
+        return lines[payload_idx]
+
+    def set_align_session(self, session: ChunkLinesSession | None) -> None:
+        self._align_session = session
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -623,6 +751,7 @@ class ReviewChunkLinesController:
         self._view = view
         self._raw_json_cli = raw_json_cli
         self._transcriptions_dir = transcriptions_dir
+        view.set_align_session(session)
         view.connect_controller_signals(self)
 
     def try_initial_chunk(self) -> None:
@@ -726,11 +855,9 @@ class ReviewChunkLinesController:
             self._view.set_page_image(s.page_images[page_number - 1])
         else:
             self._view.set_page_image(None)
-        self._view.set_active_row(ridx)
         self._view.show_active_line_box(line)
-        center = normalized_center_y_for_line(line)
-        if center is not None:
-            self._view.center_page_on_normalized_y(center)
+        self._view.set_active_row(ridx)
+        self._view.schedule_align_image_to_active_row(ridx, line)
         self._view.set_prev_next_enabled(ridx > 0, ridx < n_editable - 1)
 
     def _on_prev(self) -> None:

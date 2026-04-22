@@ -551,7 +551,13 @@ def line_notes(line: dict) -> str:
 
 
 class ChunkLinesSession:
-    """Mutable state for one loaded chunk: transcription JSON, page rasters, editable-line cursor."""
+    """Mutable state for one loaded chunk: transcription JSON, page rasters, editable-line cursor.
+
+    ``ridx`` (editable row index): index into ``editable_indices`` and into the reviewer's
+    visible row list, in ``0 .. len(editable_indices) - 1``. Same meaning as
+    ``editable_ridx``. Not an index into the full ``lines`` array; the payload index there
+    is ``editable_indices[ridx]``.
+    """
 
     def __init__(self) -> None:
         self.paths: TranscriptionPaths | None = None
@@ -560,7 +566,7 @@ class ChunkLinesSession:
         self.lines: list = []
         self.line_records: list[LineRecord] = []
         self.editable_indices: list[int] = []
-        self.editable_ridx: int = 0
+        self.editable_ridx: int = 0  # ridx: which editable row is active (see class docstring)
         self.dirty: bool = False
         self.source_raw_path: str = ''
         self.original_editable_texts: dict[int, str] = {}

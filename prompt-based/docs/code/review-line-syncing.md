@@ -34,11 +34,11 @@ sequenceDiagram
 
     loop when active row changes
         reviewer->>session: line_at_editable_ridx()
-        reviewer->>ui: set_page_image(page_number)
-        reviewer->>ui: show_active_line_box(box_2d)
-        reviewer->>modelHelpers: normalized_center_y_for_line(line)
-        modelHelpers-->>reviewer: centerY(0..1000)
-        reviewer->>ui: center_page_on_normalized_y(centerY)
+        reviewer->>ui: set_page_image(pageRasterOrNone)
+        reviewer->>ui: show_active_line_box(line)
+        reviewer->>ui: set_active_row(ridx)
+        reviewer->>ui: schedule_align_image_to_active_row(ridx, line)
+        Note over ui: Deferred align maps highlight center to the active QLineEdit center in the page viewport; see Runtime UI Focus Sequence.
     end
 ```
 
@@ -65,12 +65,21 @@ sequenceDiagram
     end
 
     controller->>view: show_active_line_box(line)
-    controller->>geometry: normalized_center_y_for_line(line)
-    alt center exists
-        geometry-->>controller: normalized centerY
-        controller->>view: center_page_on_normalized_y(centerY)
-    else center missing
-        controller-->>view: skip recenter
+    controller->>view: set_active_row(ridx)
+    Note over view: ensureWidgetVisible on the focused QLineEdit
+    controller->>view: schedule_align_image_to_active_row(ridx, line)
+    Note over view: QTimer.singleShot(0) so list scroll finishes before mapTo
+    view->>view: align_image_to_active_row(ridx, line)
+    alt highlight visible
+        view->>view: centerOn adjusted Y so box center matches editor center in viewport
+    else no valid box_2d
+        view->>geometry: normalized_center_y_for_line(line)
+        alt normalized center exists
+            geometry-->>view: centerY(0..1000)
+            view->>view: center_page_on_normalized_y(centerY)
+        else center missing
+            view-->>view: skip vertical scroll
+        end
     end
 
     controller->>view: set_prev_next_enabled(...)
@@ -79,7 +88,7 @@ sequenceDiagram
 ## Big Picture
 
 1. **Transcription:** Optionally refine each line’s `box_2d` against the rasterized page (snap-to-ink), then write JSON.
-2. **Review:** Load that JSON and PDF rasters at a fixed DPI. For the focused line, pick the page from `page_number`, draw a highlight from `box_2d`, and vertically center using the box’s normalized midpoint. There is no live OCR or text–image matching in the reviewer.
+2. **Review:** Load that JSON and PDF rasters at a fixed DPI. For the focused line, pick the page from `page_number`, draw a highlight from `box_2d`, and **scroll the image** so the highlight’s **vertical center** lines up with the **vertical center of the active line editor** in the left pane’s viewport (so the reviewer can scan mostly left–right). Extra **scene padding** above and below the page pixmap makes that possible even for lines at the bottom of the page. If there is no drawable box, the view falls back to `center_page_on_normalized_y()` using `normalized_center_y_for_line()`. There is no live OCR or text–image matching in the reviewer.
 
 `payload['lines']` is the `lines` array in `*_final.json` or `*_raw.json`, loaded by `ChunkLinesSession.load_chunk()` → `load_payload()` in `chunk_lines_model.py`.
 
@@ -91,7 +100,7 @@ Each line needs at least:
 - `text`
 - `box_2d` — `[ymin, xmin, ymax, xmax]` on a **0–1000** grid (`BOX_2D_NORMALIZED_MAX`)
 
-Review maps that grid to the current page pixmap size. Vertical centering uses `(ymin + ymax) / 2`; the full box drives the highlight.
+Review maps that grid to the current page pixmap size. The full box drives the highlight rectangle. **Scroll alignment** uses the **center** of that highlight (in scene coordinates) versus the **center** of the focused `QLineEdit` mapped into the page view’s viewport. **`normalized_center_y_for_line()`** (from `(ymin + ymax) / 2` on the 0–1000 grid) is used for **fallback** scrolling when `box_2d` is missing or invalid.
 
 ## Box Adjustment (snap-to-ink)
 
@@ -101,7 +110,11 @@ Review maps that grid to the current page pixmap size. Vertical centering uses `
 
 ## Reviewer Behavior
 
-`ReviewChunkLinesController._show_line()` drives page image, highlight, and vertical center. Highlight padding in `show_active_line_box()` is **UI-only** and separate from crop padding in `clamp_box_2d_to_pixels()`.
+`ReviewChunkLinesController._show_line()` drives page image, highlight, list focus, and scheduled alignment: `set_page_image()` → `show_active_line_box()` → `set_active_row()` (focus + `QScrollArea.ensureWidgetVisible`) → `schedule_align_image_to_active_row()`.
+
+**Vertical sync:** `align_image_to_active_row()` keeps the current horizontal scene center, computes a vertical `centerOn` target so the active highlight’s center shares the same viewport **Y** as the active editor (using the view transform’s vertical scale). **`_update_scene_vertical_padding()`** extends `QGraphicsScene` with transparent top/bottom margin (derived from viewport height and scale) and offsets the pixmap and highlight items so the last lines can still be aligned with the transcription row. **`_refit_and_restore_focus_center()`** runs after zoom, splitter moves, and resize: it refits width, reapplies padding, then either re-runs `align_image_to_active_row()` for the last focused row (via `set_align_session()` + `_row_indices`) or `center_page_on_normalized_y()` when the last scroll used the fallback path.
+
+Highlight padding in `show_active_line_box()` is **UI-only** and separate from crop padding in `clamp_box_2d_to_pixels()`.
 
 ### Crop padding (for `crop_for_line`, not the main review overlay)
 
@@ -122,13 +135,14 @@ Review maps that grid to the current page pixmap size. Vertical centering uses `
 ## Failure Modes (short)
 
 - Bad `page_number` → no page image
-- Bad `box_2d` → no highlight / no recenter
+- Bad `box_2d` → no highlight; alignment falls back to `normalized_center_y_for_line` when possible, otherwise vertical scroll is skipped
 - Snap returns `None` → original `box_2d` kept
 
 ## Tuning and Verification
 
 - **Snap and crop:** `SNAP_*`, `CROP_PAD_*`, `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`
 - **Review highlight:** padding in `show_active_line_box()` in `review-chunk.py`
+- **Review vertical padding:** margin added in `_update_scene_vertical_padding()` in `review-chunk.py` (viewport-sized slack for bottom-line alignment)
 - **Tests / visuals:** `prompt-based/tests/test_chunk_lines_model.py`, `prompt-based/tests/chunk-lines-boxes-export.py`
 
 After changing snap logic or constants, re-run transcription for affected chunks so `*_raw.json` picks up new boxes, then spot-check in the reviewer.

@@ -167,7 +167,7 @@ class LineRecord:
         self.data['text'] = value.rstrip()
 
     def confidence_label(self) -> str | None:
-        value = self.data.get('confidence_label')
+        value = self.data.get('ai_confidence_label')
         if not isinstance(value, str):
             return None
         label = value.strip().lower()
@@ -176,8 +176,37 @@ class LineRecord:
         return label
 
     def notes(self) -> str:
-        value = self.data.get('notes', '')
+        value = self.data.get('ai_notes', '')
         return value if isinstance(value, str) else ''
+
+    def reviewer_confidence_label(self) -> str | None:
+        value = self.data.get('reviewer_confidence_label')
+        if not isinstance(value, str):
+            return None
+        label = value.strip().lower()
+        if label not in {'low', 'medium', 'high'}:
+            return None
+        return label
+
+    def set_reviewer_confidence_label(self, value: str | None) -> None:
+        if not isinstance(value, str):
+            self.data.pop('reviewer_confidence_label', None)
+            return
+        label = value.strip().lower()
+        if label not in {'low', 'medium', 'high'}:
+            self.data.pop('reviewer_confidence_label', None)
+            return
+        self.data['reviewer_confidence_label'] = label
+
+    def reviewer_notes(self) -> str:
+        value = self.data.get('reviewer_notes', '')
+        return value if isinstance(value, str) else ''
+
+    def set_reviewer_notes(self, value: str) -> None:
+        if not isinstance(value, str):
+            self.data['reviewer_notes'] = ''
+            return
+        self.data['reviewer_notes'] = value.rstrip()
 
     def is_editable(self) -> bool:
         return not is_injected_page_marker(self.text())
@@ -723,8 +752,8 @@ class ChunkLinesSession:
             prev_line = previous_lines[idx]
             prev_label = prev_line.confidence_label()
             if prev_label is not None:
-                line.data['confidence_label'] = prev_label
-            line.data['notes'] = prev_line.notes()
+                line.data['ai_confidence_label'] = prev_label
+            line.data['ai_notes'] = prev_line.notes()
 
         # Second pass: restore by editable-line order to absorb marker/index drift.
         prev_editable = [i for i, record in enumerate(previous_lines) if record.is_editable()]
@@ -736,5 +765,5 @@ class ChunkLinesSession:
             prev_line = previous_lines[prev_editable[ridx]]
             prev_label = prev_line.confidence_label()
             if prev_label is not None:
-                curr_line.data['confidence_label'] = prev_label
-            curr_line.data['notes'] = prev_line.notes()
+                curr_line.data['ai_confidence_label'] = prev_label
+            curr_line.data['ai_notes'] = prev_line.notes()

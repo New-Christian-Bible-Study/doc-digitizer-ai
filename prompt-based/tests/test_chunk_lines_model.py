@@ -52,13 +52,27 @@ def test_normalized_center_y_for_line_returns_midpoint():
 
 
 def test_line_confidence_label_normalizes_and_validates():
-    assert line_confidence_label({'confidence_label': ' LOW '}) == 'low'
-    assert line_confidence_label({'confidence_label': 'unknown'}) is None
+    assert line_confidence_label({'ai_confidence_label': ' LOW '}) == 'low'
+    assert line_confidence_label({'ai_confidence_label': 'unknown'}) is None
 
 
 def test_line_notes_defaults_to_empty_string():
     assert line_notes({}) == ''
-    assert line_notes({'notes': 'hard glyph'}) == 'hard glyph'
+    assert line_notes({'ai_notes': 'hard glyph'}) == 'hard glyph'
+
+
+def test_line_record_reviewer_metadata_round_trip():
+    record = LineRecord.from_object({})
+    assert record.reviewer_confidence_label() is None
+    assert record.reviewer_notes() == ''
+
+    record.set_reviewer_confidence_label('Medium')
+    record.set_reviewer_notes('reviewer note')
+    assert record.reviewer_confidence_label() == 'medium'
+    assert record.reviewer_notes() == 'reviewer note'
+
+    record.set_reviewer_confidence_label(None)
+    assert record.reviewer_confidence_label() is None
 
 
 def test_line_text_returns_rstripped_string():
@@ -121,9 +135,9 @@ def test_low_confidence_unchanged_stats_counts_only_low():
     session.lines = session.payload['lines']
     session.line_records = [LineRecord.from_object(line) for line in session.lines]
     session.editable_indices = [0, 1, 2]
-    session.lines[0]['confidence_label'] = 'low'
-    session.lines[1]['confidence_label'] = 'medium'
-    session.lines[2]['confidence_label'] = 'low'
+    session.lines[0]['ai_confidence_label'] = 'low'
+    session.lines[1]['ai_confidence_label'] = 'medium'
+    session.lines[2]['ai_confidence_label'] = 'low'
     session.lines[0][REVIEWER_CHANGED_KEY] = False
     session.lines[1][REVIEWER_CHANGED_KEY] = False
     session.lines[2][REVIEWER_CHANGED_KEY] = True
@@ -147,8 +161,8 @@ def test_reload_from_raw_restores_missing_confidence_metadata(tmp_path: Path):
             'page_number': 1,
             'text': 'line one',
             'box_2d': [0, 0, 10, 10],
-            'confidence_label': 'medium',
-            'notes': 'faded text',
+            'ai_confidence_label': 'medium',
+            'ai_notes': 'faded text',
         }
     ]
     session.line_records = [LineRecord.from_object(line) for line in session.lines]
@@ -157,8 +171,8 @@ def test_reload_from_raw_restores_missing_confidence_metadata(tmp_path: Path):
     err = session.reload_from_raw_disk()
 
     assert err is None
-    assert session.lines[0]['confidence_label'] == 'medium'
-    assert session.lines[0]['notes'] == 'faded text'
+    assert session.lines[0]['ai_confidence_label'] == 'medium'
+    assert session.lines[0]['ai_notes'] == 'faded text'
 
 
 def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflicts(tmp_path: Path):
@@ -166,7 +180,7 @@ def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflic
     raw_path.write_text(
         (
             '{"lines":[{"page_number":1,"text":"line one","box_2d":[0,0,10,10],'
-            '"confidence_label":"high","notes":""}]}'
+            '"ai_confidence_label":"high","ai_notes":""}]}'
         ),
         encoding='utf-8',
     )
@@ -178,8 +192,8 @@ def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflic
             'page_number': 1,
             'text': 'line one',
             'box_2d': [0, 0, 10, 10],
-            'confidence_label': 'medium',
-            'notes': 'faded text',
+            'ai_confidence_label': 'medium',
+            'ai_notes': 'faded text',
         }
     ]
     session.line_records = [LineRecord.from_object(line) for line in session.lines]
@@ -188,8 +202,8 @@ def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflic
     err = session.reload_from_raw_disk()
 
     assert err is None
-    assert session.lines[0]['confidence_label'] == 'medium'
-    assert session.lines[0]['notes'] == 'faded text'
+    assert session.lines[0]['ai_confidence_label'] == 'medium'
+    assert session.lines[0]['ai_notes'] == 'faded text'
 
 
 def test_reload_from_raw_restores_confidence_when_indices_shift():
@@ -200,8 +214,8 @@ def test_reload_from_raw_restores_confidence_when_indices_shift():
             'page_number': 1,
             'text': 'line one',
             'box_2d': [0, 0, 10, 10],
-            'confidence_label': 'medium',
-            'notes': 'faded text',
+            'ai_confidence_label': 'medium',
+            'ai_notes': 'faded text',
         },
     ]
     session.payload = {
@@ -215,5 +229,5 @@ def test_reload_from_raw_restores_confidence_when_indices_shift():
         [LineRecord.from_object(line) for line in previous_lines]
     )
 
-    assert session.payload['lines'][0]['confidence_label'] == 'medium'
-    assert session.payload['lines'][0]['notes'] == 'faded text'
+    assert session.payload['lines'][0]['ai_confidence_label'] == 'medium'
+    assert session.payload['lines'][0]['ai_notes'] == 'faded text'

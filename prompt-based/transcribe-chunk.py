@@ -365,8 +365,8 @@ def normalize_lines_from_model(raw_lines: object) -> list[dict]:
                 'page_number': item.get('page_number'),
                 'text': normalize_transcription_newlines(item.get('text', '')),
                 'box_2d': item.get('box_2d'),
-                'confidence_label': item.get('confidence_label'),
-                'notes': item.get('notes', ''),
+                'ai_confidence_label': item.get('ai_confidence_label'),
+                'ai_notes': item.get('ai_notes', ''),
             }
         )
     return normalized
@@ -427,7 +427,7 @@ def is_notes_min_length_validation_error(exc: jsonschema.ValidationError) -> boo
     validator_is_min_length = exc.validator == 'minLength'
     validator_value_is_one = exc.validator_value == 1
     path = list(exc.absolute_path)
-    field_is_notes = path and path[-1] == 'notes'
+    field_is_notes = path and path[-1] == 'ai_notes'
     schema_path = list(exc.absolute_schema_path)
     schema_points_to_notes = schema_path and schema_path[-1] == 'minLength'
     return (
@@ -547,7 +547,7 @@ def build_ai_summary_markdown(
     note_count = sum(
         1
         for line in lines
-        if isinstance(line.get('notes'), str) and line['notes'].strip()
+        if isinstance(line.get('ai_notes'), str) and line['ai_notes'].strip()
     )
 
     return (

@@ -196,6 +196,11 @@ class ReviewMainWindow(QMainWindow):
         self._line_original_texts: list[str] = []
         self._line_conf_labels: list[str] = []
         self._row_indices: list[int] = []
+        self._review_note_buttons: list[QPushButton] = []
+        self._review_panels: list[QWidget] = []
+        self._review_conf_combos: list[QComboBox] = []
+        self._review_note_edits: list[QLineEdit] = []
+        self._review_panel_forced_visible: list[bool] = []
 
         # Left pane: fitted page pixmap, optional scene padding for bottom-line alignment, zoom.
         self._page_pixmap: QPixmap | None = None
@@ -395,6 +400,11 @@ class ReviewMainWindow(QMainWindow):
         self._line_original_texts = []
         self._line_conf_labels = []
         self._row_indices = []
+        self._review_note_buttons = []
+        self._review_panels = []
+        self._review_conf_combos = []
+        self._review_note_edits = []
+        self._review_panel_forced_visible = []
         self._last_align_ridx = None
 
     def populate_lines(self, session: ChunkLinesSession, ctrl: 'ReviewChunkLinesController') -> None:
@@ -413,7 +423,7 @@ class ReviewMainWindow(QMainWindow):
             # clear warning line above the editor with confidence + reason.
             if conf != 'high':
                 warn = QLabel(
-                    f'Confidence: {conf.upper()}'
+                    f'AI Confidence: {conf.upper()}'
                     + (f' - {notes_text}' if notes_text else ' - No reason provided')
                 )
                 warn.setWordWrap(True)
@@ -431,7 +441,45 @@ class ReviewMainWindow(QMainWindow):
             edit.textChanged.connect(ctrl._on_text_changed)
             edit.textChanged.connect(lambda _text, i=ridx: self._on_editor_text_changed(i))
             edit.focused.connect(ctrl._on_row_focused)
-            row_layout.addWidget(edit)
+            input_row = QHBoxLayout()
+            input_row.setContentsMargins(0, 0, 0, 0)
+            input_row.setSpacing(6)
+            input_row.addWidget(edit, stretch=1)
+
+            review_btn = QPushButton('Add note')
+            review_btn.clicked.connect(
+                lambda _checked=False, i=ridx: self._on_reviewer_note_action_clicked(i),
+            )
+            input_row.addWidget(review_btn)
+
+            review_panel = QWidget()
+            review_panel_layout = QHBoxLayout(review_panel)
+            review_panel_layout.setContentsMargins(0, 0, 0, 0)
+            review_panel_layout.setSpacing(6)
+            review_panel_layout.addWidget(QLabel('Reviewer confidence'))
+            reviewer_conf = QComboBox()
+            reviewer_conf.addItem('Unset', '')
+            reviewer_conf.addItem('High', 'high')
+            reviewer_conf.addItem('Medium', 'medium')
+            reviewer_conf.addItem('Low', 'low')
+            review_panel_layout.addWidget(reviewer_conf)
+            review_panel_layout.addWidget(QLabel('Reviewer note'))
+            reviewer_note = QLineEdit()
+            reviewer_note.setPlaceholderText('Optional reviewer note')
+            review_panel_layout.addWidget(reviewer_note, stretch=1)
+            row_layout.addWidget(review_panel)
+            row_layout.addLayout(input_row)
+
+            record = session.line_records[payload_idx]
+            reviewer_label = record.reviewer_confidence_label() or ''
+            reviewer_label_idx = reviewer_conf.findData(reviewer_label)
+            reviewer_conf.setCurrentIndex(
+                reviewer_label_idx if reviewer_label_idx >= 0 else 0,
+            )
+            reviewer_note.setText(record.reviewer_notes())
+            has_reviewer_data = bool(reviewer_label or record.reviewer_notes().strip())
+            review_panel.setVisible(has_reviewer_data)
+
             self._apply_row_confidence_style(row, badge, conf)
 
             self._line_layout.insertWidget(self._line_layout.count() - 1, row)
@@ -443,6 +491,21 @@ class ReviewMainWindow(QMainWindow):
             self._line_original_texts.append(original_text)
             self._line_conf_labels.append(conf)
             self._row_indices.append(payload_idx)
+            self._review_note_buttons.append(review_btn)
+            self._review_panels.append(review_panel)
+            self._review_conf_combos.append(reviewer_conf)
+            self._review_note_edits.append(reviewer_note)
+            self._review_panel_forced_visible.append(False)
+            reviewer_conf.currentTextChanged.connect(
+                lambda _text, i=ridx: self._on_reviewer_metadata_changed(i),
+            )
+            reviewer_conf.currentTextChanged.connect(ctrl._on_text_changed)
+            reviewer_note.textChanged.connect(
+                lambda _text, i=ridx: self._on_reviewer_metadata_changed(i),
+            )
+            reviewer_note.textChanged.connect(ctrl._on_text_changed)
+            self._update_reviewer_note_button(ridx)
+            self._on_editor_text_changed(ridx)
 
     def _apply_row_confidence_style(self, row: QWidget, badge: QLabel, label: str | None) -> None:
         if label == 'low':
@@ -687,6 +750,19 @@ class ReviewMainWindow(QMainWindow):
             return self._line_edits[ridx].text()
         return ''
 
+    def reviewer_confidence_value(self, ridx: int) -> str | None:
+        if not (0 <= ridx < len(self._review_conf_combos)):
+            return None
+        value = self._review_conf_combos[ridx].currentData()
+        if value in {None, ''}:
+            return None
+        return str(value)
+
+    def reviewer_note_text(self, ridx: int) -> str:
+        if not (0 <= ridx < len(self._review_note_edits)):
+            return ''
+        return self._review_note_edits[ridx].text()
+
     def set_prev_next_enabled(self, prev_enabled: bool, next_enabled: bool) -> None:
         self._btn_prev.setEnabled(prev_enabled)
         self._btn_next.setEnabled(next_enabled)
@@ -694,6 +770,9 @@ class ReviewMainWindow(QMainWindow):
     def _on_editor_text_changed(self, ridx: int) -> None:
         if not (0 <= ridx < len(self._line_edits)):
             return
+        current_text = self._line_edits[ridx].text().rstrip()
+        changed = current_text != self._line_original_texts[ridx]
+        self._apply_edited_line_style(ridx, changed)
         conf = self._line_conf_labels[ridx] if ridx < len(self._line_conf_labels) else 'high'
         if conf == 'high':
             return
@@ -704,14 +783,73 @@ class ReviewMainWindow(QMainWindow):
         )
         if warn is None:
             return
-        current_text = self._line_edits[ridx].text().rstrip()
-        changed = current_text != self._line_original_texts[ridx]
+        warn.setVisible(not changed)
+
+    def _apply_edited_line_style(self, ridx: int, changed: bool) -> None:
+        if not (0 <= ridx < len(self._line_edits)):
+            return
         if changed:
-            warn.setStyleSheet(
-                'QLabel { font-weight: 700; text-decoration: line-through; opacity: 0.75; margin-bottom: 1px; }'
+            self._line_edits[ridx].setStyleSheet(
+                'QLineEdit { padding-top: 2px; padding-bottom: 2px; '
+                'color: #1f4db8; border: 1px solid #4f8cff; border-radius: 4px; }'
             )
         else:
-            warn.setStyleSheet('QLabel { font-weight: 700; margin-bottom: 1px; }')
+            self._line_edits[ridx].setStyleSheet(
+                'QLineEdit { padding-top: 2px; padding-bottom: 2px; }'
+            )
+
+    def _on_reviewer_metadata_changed(self, ridx: int) -> None:
+        if not (0 <= ridx < len(self._review_note_edits)):
+            return
+        has_data = self._has_reviewer_data(ridx)
+        if 0 <= ridx < len(self._review_panels):
+            keep_visible = has_data or self._review_panel_forced_visible[ridx]
+            self._review_panels[ridx].setVisible(keep_visible)
+        self._update_reviewer_note_button(ridx)
+
+    def _has_reviewer_data(self, ridx: int) -> bool:
+        if not (0 <= ridx < len(self._review_note_edits)):
+            return False
+        note_text = self._review_note_edits[ridx].text().strip()
+        conf_value = ''
+        if 0 <= ridx < len(self._review_conf_combos):
+            conf_value = str(self._review_conf_combos[ridx].currentData() or '').strip()
+        return bool(note_text or conf_value)
+
+    def _update_reviewer_note_button(self, ridx: int) -> None:
+        if not (0 <= ridx < len(self._review_note_buttons)):
+            return
+        has_data = self._has_reviewer_data(ridx)
+        self._review_note_buttons[ridx].setText('Remove note' if has_data else 'Add note')
+
+    def _on_reviewer_note_action_clicked(self, ridx: int) -> None:
+        if not (0 <= ridx < len(self._review_note_edits)):
+            return
+        has_data = self._has_reviewer_data(ridx)
+        if not has_data:
+            if 0 <= ridx < len(self._review_panels):
+                self._review_panels[ridx].setVisible(True)
+            self._review_panel_forced_visible[ridx] = True
+            self._review_note_edits[ridx].setFocus()
+            return
+
+        reply = QMessageBox.question(
+            self,
+            'Remove reviewer note',
+            'Remove reviewer confidence and note for this line?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        if 0 <= ridx < len(self._review_conf_combos):
+            self._review_conf_combos[ridx].setCurrentIndex(0)
+        self._review_note_edits[ridx].clear()
+        self._review_panel_forced_visible[ridx] = False
+        if 0 <= ridx < len(self._review_panels):
+            self._review_panels[ridx].setVisible(False)
+        self._update_reviewer_note_button(ridx)
 
 
 class FocusLineEdit(QLineEdit):
@@ -956,6 +1094,10 @@ class ReviewChunkLinesController:
         for ridx in range(len(self._session.editable_indices)):
             self._session.editable_ridx = ridx
             self._session.commit_editable_text(self._view.line_text(ridx))
+            payload_idx = self._session.editable_indices[ridx]
+            record = self._session.line_records[payload_idx]
+            record.set_reviewer_confidence_label(self._view.reviewer_confidence_value(ridx))
+            record.set_reviewer_notes(self._view.reviewer_note_text(ridx))
         self._session.refresh_reviewer_changed_flags()
 
 

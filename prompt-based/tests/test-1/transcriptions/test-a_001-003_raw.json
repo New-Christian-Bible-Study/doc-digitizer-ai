@@ -9,8 +9,8 @@
         77,
         706
       ],
-      "confidence_label": "high",
-      "notes": ""
+      "ai_confidence_label": "high",
+      "ai_notes": ""
     },
     {
       "page_number": 1,
@@ -21,8 +21,8 @@
         133,
         199
       ],
-      "confidence_label": "high",
-      "notes": ""
+      "ai_confidence_label": "high",
+      "ai_notes": ""
     },
     {
       "page_number": 1,
@@ -33,8 +33,8 @@
         168,
         615
       ],
-      "confidence_label": "high",
-      "notes": ""
+      "ai_confidence_label": "high",
+      "ai_notes": ""
     },
     {
       "page_number": 2,
@@ -45,8 +45,8 @@
         71,
         199
       ],
-      "confidence_label": "high",
-      "notes": ""
+      "ai_confidence_label": "high",
+      "ai_notes": ""
     },
     {
       "page_number": 2,
@@ -57,8 +57,8 @@
         106,
         615
       ],
-      "confidence_label": "high",
-      "notes": ""
+      "ai_confidence_label": "high",
+      "ai_notes": ""
     },
     {
       "page_number": 3,
@@ -69,8 +69,8 @@
         71,
         199
       ],
-      "confidence_label": "high",
-      "notes": ""
+      "ai_confidence_label": "high",
+      "ai_notes": ""
     },
     {
       "page_number": 3,
@@ -81,12 +81,12 @@
         106,
         615
       ],
-      "confidence_label": "high",
-      "notes": ""
+      "ai_confidence_label": "high",
+      "ai_notes": ""
     }
   ],
   "confidence_score": 0.99,
-  "confidence_label": "high",
   "model": "gemini/gemini-3.1-pro-preview",
-  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
+  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium",
+  "ai_confidence_label": "high"
 }

@@ -34,14 +34,14 @@
             "minItems": 4,
             "maxItems": 4
           },
-          "confidence_label": {
+          "ai_confidence_label": {
             "type": "string",
             "enum": ["low", "medium", "high"],
-            "description": "Per-line confidence level for triage"
+            "description": "AI per-line confidence level for triage"
           },
-          "notes": {
+          "ai_notes": {
             "type": "string",
-            "description": "Per-line rationale for uncertainty; required when line confidence is low"
+            "description": "AI per-line rationale for uncertainty; required when AI confidence is low"
           }
         }
       }
@@ -75,11 +75,11 @@
             "contains": {
               "type": "object",
               "properties": {
-                "confidence_label": {
+                "ai_confidence_label": {
                   "const": "low"
                 }
               },
-              "required": ["confidence_label"]
+              "required": ["ai_confidence_label"]
             }
           }
         }
@@ -91,16 +91,16 @@
             "items": {
               "if": {
                 "properties": {
-                  "confidence_label": {
+                  "ai_confidence_label": {
                     "const": "low"
                   }
                 },
-                "required": ["confidence_label"]
+                "required": ["ai_confidence_label"]
               },
               "then": {
-                "required": ["notes"],
+                "required": ["ai_notes"],
                 "properties": {
-                  "notes": {
+                  "ai_notes": {
                     "minLength": 1
                   }
                 }

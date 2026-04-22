@@ -212,7 +212,7 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
                         content=(
                             '{"lines":[{"page_number":1,"text":"hello",'
                                 '"box_2d":[0,0,100,100],'
-                                '"confidence_label":"high","notes":""}],'
+                                '"ai_confidence_label":"high","ai_notes":""}],'
                             '"confidence_score":1.0,"confidence_label":"high",'
                             '"notes":""}'
                         )
@@ -286,7 +286,7 @@ def test_main_with_chunk_dir_outside_working_dir(tmp_path: Path, monkeypatch, ca
                         content=(
                             '{"lines":[{"page_number":1,"text":"hello",'
                             '"box_2d":[0,0,100,100],'
-                            '"confidence_label":"high","notes":""}],'
+                            '"ai_confidence_label":"high","ai_notes":""}],'
                             '"confidence_score":1.0,"confidence_label":"high",'
                             '"notes":""}'
                         )
@@ -353,7 +353,7 @@ def test_main_accepts_chunk_dir_stress_tests_layout(tmp_path: Path, monkeypatch)
                         content=(
                             '{"lines":[{"page_number":1,"text":"hello",'
                             '"box_2d":[0,0,100,100],'
-                            '"confidence_label":"high","notes":""}],'
+                            '"ai_confidence_label":"high","ai_notes":""}],'
                             '"confidence_score":1.0,"confidence_label":"high",'
                             '"notes":""}'
                         )
@@ -397,8 +397,8 @@ def test_schema_requires_line_notes_for_low_confidence():
                 'page_number': 1,
                 'text': 'unclear line',
                 'box_2d': [0, 0, 100, 100],
-                'confidence_label': 'low',
-                'notes': '',
+                'ai_confidence_label': 'low',
+                'ai_notes': '',
             }
         ],
         'confidence_score': 0.5,

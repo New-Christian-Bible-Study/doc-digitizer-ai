@@ -147,9 +147,7 @@ This step does **not** call the model. You still run `transcribe-chunk.py` first
 - top-level `review_complete` boolean (set to `true` only from the explicit completion flow)
 - per-editable-line `reviewer_changed` boolean (whether reviewer changed that line compared with raw text)
 
-**System dependency:** [Poppler](https://poppler.freedesktop.org/) must be installed so `pdf2image` can rasterize the PDF (on Ubuntu: `sudo apt install poppler-utils`).
-
-The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Pass 1 sends the **PDF** to the model, while the UI uses Poppler — normalized `box_2d` line crops are **best-effort** aligned to the page aspect ratio; Gemini’s internal render may differ slightly.
+The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Pass 1 sends the **PDF** to the model, while the UI uses a local PDF rasterizer (`pypdfium2`) — normalized `box_2d` line crops are **best-effort** aligned to the page aspect ratio; Gemini’s internal render may differ slightly.
 
 `--working-dir` is the same as for `transcribe-chunk.py`: the directory that holds `transcriptions/` and usually `source-pdfs/` / config (not those subfolders themselves). Chunk PDFs default to `<working-dir>/chunk-pdfs/` unless you pass **`--chunk-dir`**.
 

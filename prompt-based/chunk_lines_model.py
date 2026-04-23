@@ -11,10 +11,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from pdf2image import convert_from_path
 from PIL import Image
 
-# Line review rasterizes chunk files with Poppler at this DPI so crop geometry is stable
+# Line review rasterizes chunk files at this DPI so crop geometry is stable
 # across machines. Pass 1 sends the PDF bytes to the model; Gemini's internal render may
 # differ slightly — ``box_2d`` crops in the UI are best-effort vs page aspect ratio.
 REVIEW_PDF_RASTER_DPI = 200
@@ -286,9 +285,9 @@ def clamp_box_2d_to_pixels(
 
     Pass 1 stores ``box_2d`` as four integers ``[ymin, xmin, ymax, xmax]`` on a
     0–``BOX_2D_NORMALIZED_MAX`` grid aligned to the rasterized page (same aspect as
-    ``width`` × ``height``). Review loads pages at ``REVIEW_PDF_RASTER_DPI`` via
-    Poppler; the model saw the PDF in Pass 1, so coordinates are best-effort aligned
-    by page aspect ratio.
+    ``width`` × ``height``). Review loads pages at ``REVIEW_PDF_RASTER_DPI``; the
+    model saw the PDF in Pass 1, so coordinates are best-effort aligned by page
+    aspect ratio.
 
     This function maps that box to ``(left, upper, right, lower)`` for ``Image.crop``,
     where ``right`` and ``lower`` are **exclusive** Pillow indices (see Pillow docs).
@@ -510,7 +509,28 @@ def load_page_images(pdf_path: Path) -> list[Image.Image]:
     """Rasterize each PDF page to a PIL image at :data:`REVIEW_PDF_RASTER_DPI`."""
     # Snap-to-ink and the line reviewer both consume these rasters; keep DPI in one place
     # so ``box_2d`` written at transcription time matches review pixmap geometry.
-    return convert_from_path(str(pdf_path), dpi=REVIEW_PDF_RASTER_DPI)
+    try:
+        import pypdfium2 as pdfium
+    except ImportError as exc:
+        raise RuntimeError(
+            'pypdfium2 is required for PDF rasterization. Install project dependencies and retry.'
+        ) from exc
+
+    # PDF coordinates are in points (72 DPI). Rendering scale maps target DPI to points.
+    render_scale = REVIEW_PDF_RASTER_DPI / 72.0
+    document = pdfium.PdfDocument(str(pdf_path))
+    images: list[Image.Image] = []
+    try:
+        for page_index in range(len(document)):
+            page = document[page_index]
+            bitmap = page.render(scale=render_scale)
+            image = bitmap.to_pil().convert('RGB')
+            images.append(image)
+    finally:
+        close = getattr(document, 'close', None)
+        if callable(close):
+            close()
+    return images
 
 
 def load_payload(raw_path: Path, final_path: Path) -> dict:

@@ -169,6 +169,16 @@ python prompt-based/review-chunk.py --working-dir prompt-based/tests/test-1
 - **Mark review complete** button: confirms completion, warns when low-confidence lines remain unchanged, then sets `review_complete=true`, saves, and exits.
 - **Quit:** Close the window, or press Ctrl-C in the terminal (the app installs a handler so this works with Qt). If the process is stuck, from another terminal: `pkill -f review-chunk.py` or `kill <pid>` (`kill -9` only as a last resort).
 
+## Cross-platform executable packaging (reviewer)
+
+`review-chunk.py` can be packaged with PyInstaller using
+`prompt-based/review-chunk.spec`.
+
+- CI matrix builds (Windows/macOS/Linux) are defined in `.github/workflows/review-chunk-executable.yml`.
+- Reviewer rasterization uses `pypdfium2`, so executables do not require a separate Poppler install.
+
+See `docs/review-chunk-executable.md` for build commands and artifact details.
+
 ## Transcription JSON to AsciiDoc
 
 To turn a Pass 1 `transcriptions/<stem>_raw.json` or reviewed `transcriptions/<stem>_final.json` into a `.adoc` file, run `transcription-json-to-adoc.py`. It reads the `lines` array and writes each line’s `text` in order, separated by newlines, next to the JSON file (e.g. `chunk_001-003_raw.json` → `chunk_001-003_raw.adoc`).

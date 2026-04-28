@@ -3,13 +3,13 @@ from pathlib import Path
 
 
 STRATEGY_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = STRATEGY_ROOT / 'transcription-json-to-adoc.py'
+MODULE_PATH = STRATEGY_ROOT / 'prompt_based' / 'transcription_json_to_adoc.py'
 
 
 def load_module():
-    spec = importlib.util.spec_from_file_location('transcription_json_to_adoc', SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location('transcription_json_to_adoc', MODULE_PATH)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f'Unable to load module from {SCRIPT_PATH}')
+        raise RuntimeError(f'Unable to load module from {MODULE_PATH}')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

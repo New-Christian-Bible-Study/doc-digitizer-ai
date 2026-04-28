@@ -14,13 +14,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 STRESS_OCR_PDF = REPO_ROOT / 'stress-tests' / 'torture' / 'english' / 'test-ocr.pdf'
 WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
 SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk.py'
+TRANSCRIBE_MODULE_PATH = STRATEGY_ROOT / 'prompt_based' / 'transcribe_chunk.py'
 PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'
 
 
 def load_transcribe_module():
-    spec = spec_from_file_location('transcribe_chunk', SCRIPT_PATH)
+    spec = spec_from_file_location('transcribe_chunk', TRANSCRIBE_MODULE_PATH)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f'Unable to load module from {SCRIPT_PATH}')
+        raise RuntimeError(f'Unable to load module from {TRANSCRIBE_MODULE_PATH}')
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

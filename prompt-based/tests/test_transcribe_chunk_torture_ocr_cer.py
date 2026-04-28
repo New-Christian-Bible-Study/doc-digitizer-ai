@@ -75,7 +75,9 @@ TORTURE_LANG_PARAMS = _torture_lang_params_for_parametrize()
 _RAW_JSON_NAME = 'test-ocr_raw.json'
 _COMPUTE_CER_PATH = REPO_ROOT / 'stress-tests' / 'compute-cer.py'
 # Script lives next to tests/ but is not a Python package; importlib matches compute-cer.
-_TRANSCRIPTION_JSON_TO_ADOC_PATH = STRATEGY_ROOT / 'transcription-json-to-adoc.py'
+_TRANSCRIPTION_JSON_TO_ADOC_PATH = (
+    STRATEGY_ROOT / 'prompt_based' / 'transcription_json_to_adoc.py'
+)
 
 # Match compute-cer.py default (strip-html-emphasis).
 _STRIP_HTML_EMPHASIS = True

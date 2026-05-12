@@ -47,6 +47,7 @@ jobs:
           pyinstaller --noconfirm --clean prompt-based/review-chunk.spec
 
       - name: Smoke test executable help output
+        shell: bash
         run: |
           python - <<'PY'
           import platform

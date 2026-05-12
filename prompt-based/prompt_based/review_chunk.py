@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from PIL import Image
 
+from prompt_based.review_chunk_args import parse_cli_args
 from prompt_based.chunk_lines_model import (
     BOX_2D_NORMALIZED_MAX,
     ChunkLinesSession,
@@ -63,52 +64,6 @@ def _review_app_icon() -> QIcon:
     if p.is_file():
         return QIcon(str(p))
     return QIcon()
-
-
-def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
-    if argv is None:
-        argv = sys.argv[1:]
-    parser = argparse.ArgumentParser(
-        description='Review and correct per-line transcriptions for a chunk.',
-    )
-    parser.add_argument(
-        '--working-dir',
-        type=Path,
-        default=Path('.'),
-        help=(
-            'Same as transcribe-chunk.py: directory containing '
-            'chunk-pdfs/ (or use --chunk-dir) and transcriptions/'
-        ),
-    )
-    parser.add_argument(
-        '--chunk-dir',
-        type=Path,
-        default=None,
-        help=(
-            'Directory containing chunk PDFs (default: working-dir/chunk-pdfs). '
-            'Relative paths are resolved under working-dir.'
-        ),
-    )
-    parser.add_argument(
-        '--transcriptions-dir',
-        type=Path,
-        default=None,
-        help=(
-            'Directory containing chunk transcription JSON files '
-            '(default: working-dir/transcriptions). Relative paths are '
-            'resolved under working-dir.'
-        ),
-    )
-    parser.add_argument(
-        '--raw-json',
-        type=Path,
-        default=None,
-        help=(
-            'Path to *_raw.json; relative paths are under --working-dir '
-            '(default: transcriptions/<stem>_raw.json)'
-        ),
-    )
-    return parser.parse_args(argv)
 
 
 def _has_review_chunk_state(root: Path) -> bool:
@@ -1098,8 +1053,9 @@ class ReviewChunkLinesController:
         self._session.refresh_reviewer_changed_flags()
 
 
-def main() -> int:
-    cli = parse_cli_args()
+def main(cli: argparse.Namespace | None = None) -> int:
+    if cli is None:
+        cli = parse_cli_args()
     has_chunk_dir = cli.chunk_dir is not None
     has_transcriptions_dir = cli.transcriptions_dir is not None
     if has_chunk_dir != has_transcriptions_dir:

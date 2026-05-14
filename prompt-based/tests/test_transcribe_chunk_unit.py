@@ -1,3 +1,9 @@
+"""These tests cover CLI guardrails, a few small helpers, and one fully mocked
+successful transcription; they do not cover real LiteLLM/PDF/Paddle, almost any
+failure path inside transcribe_single_chunk, --all / interactive chunk or prompt
+selection, or most normalization and logging edge cases.
+"""
+
 import os
 import subprocess
 import sys
@@ -16,6 +22,20 @@ WORKING_DIR = STRATEGY_ROOT / 'tests' / 'test-1'
 SCRIPT_PATH = STRATEGY_ROOT / 'transcribe-chunk.py'
 TRANSCRIBE_MODULE_PATH = STRATEGY_ROOT / 'prompt_based' / 'transcribe_chunk.py'
 PROMPT_PATH = STRATEGY_ROOT / 'prompt.md'
+
+
+def _fake_assign_paddle_line_boxes(_chunk_path, lines):
+    for line in lines:
+        a = line.pop('anchor_box_2d', None)
+        if not isinstance(a, list) or len(a) != 4:
+            a = [0, 0, 100, 100]
+        line['line_box'] = {
+            'ymin': int(a[0]),
+            'xmin': int(a[1]),
+            'ymax': int(a[2]),
+            'xmax': int(a[3]),
+        }
+    return None
 
 
 def load_transcribe_module():
@@ -185,6 +205,10 @@ def test_resolve_prompt_md_raises_when_no_working_or_fallback_prompt(tmp_path: P
 
 
 def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        'prompt_based.paddle_line_boxes.assign_paddle_line_boxes',
+        _fake_assign_paddle_line_boxes,
+    )
     module = load_transcribe_module()
     working_dir = tmp_path / 'working'
     chunk_dir = working_dir / 'chunk-pdfs'
@@ -212,7 +236,7 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
                     message=SimpleNamespace(
                         content=(
                             '{"lines":[{"page_number":1,"text":"hello",'
-                                '"box_2d":[0,0,100,100],'
+                                '"anchor_box_2d":[0,0,100,100],'
                                 '"ai_confidence_label":"high","ai_notes":""}],'
                             '"confidence_score":1.0,"confidence_label":"high",'
                             '"notes":""}'
@@ -258,6 +282,10 @@ def test_main_prints_full_prompt_path_before_inference(tmp_path: Path, monkeypat
 
 def test_main_with_chunk_dir_outside_working_dir(tmp_path: Path, monkeypatch, capsys):
     """Chunk PDFs can live outside working-dir when --chunk-dir is set."""
+    monkeypatch.setattr(
+        'prompt_based.paddle_line_boxes.assign_paddle_line_boxes',
+        _fake_assign_paddle_line_boxes,
+    )
     module = load_transcribe_module()
     working_dir = tmp_path / 'working'
     chunk_root = tmp_path / 'chunks'
@@ -286,7 +314,7 @@ def test_main_with_chunk_dir_outside_working_dir(tmp_path: Path, monkeypatch, ca
                     message=SimpleNamespace(
                         content=(
                             '{"lines":[{"page_number":1,"text":"hello",'
-                            '"box_2d":[0,0,100,100],'
+                            '"anchor_box_2d":[0,0,100,100],'
                             '"ai_confidence_label":"high","ai_notes":""}],'
                             '"confidence_score":1.0,"confidence_label":"high",'
                             '"notes":""}'
@@ -329,6 +357,10 @@ def test_main_with_chunk_dir_outside_working_dir(tmp_path: Path, monkeypatch, ca
 )
 def test_main_accepts_chunk_dir_stress_tests_layout(tmp_path: Path, monkeypatch):
     """Regression: chunks under stress-tests/ with transcriptions under a separate working dir."""
+    monkeypatch.setattr(
+        'prompt_based.paddle_line_boxes.assign_paddle_line_boxes',
+        _fake_assign_paddle_line_boxes,
+    )
     module = load_transcribe_module()
     working_dir = tmp_path / 'working'
     working_dir.mkdir(parents=True, exist_ok=True)
@@ -353,7 +385,7 @@ def test_main_accepts_chunk_dir_stress_tests_layout(tmp_path: Path, monkeypatch)
                     message=SimpleNamespace(
                         content=(
                             '{"lines":[{"page_number":1,"text":"hello",'
-                            '"box_2d":[0,0,100,100],'
+                            '"anchor_box_2d":[0,0,100,100],'
                             '"ai_confidence_label":"high","ai_notes":""}],'
                             '"confidence_score":1.0,"confidence_label":"high",'
                             '"notes":""}'
@@ -389,15 +421,15 @@ def test_main_accepts_chunk_dir_stress_tests_layout(tmp_path: Path, monkeypatch)
     assert (working_dir / 'transcriptions' / f'{stem}_raw.json').is_file()
 
 
-def test_schema_requires_line_notes_for_low_confidence():
+def test_pass1_schema_requires_line_notes_for_low_confidence():
     module = load_transcribe_module()
-    schema = module.load_schema()
+    schema = module.load_pass1_schema()
     payload = {
         'lines': [
             {
                 'page_number': 1,
                 'text': 'unclear line',
-                'box_2d': [0, 0, 100, 100],
+                'anchor_box_2d': [0, 0, 100, 100],
                 'ai_confidence_label': 'low',
                 'ai_notes': '',
             }
@@ -407,3 +439,23 @@ def test_schema_requires_line_notes_for_low_confidence():
     }
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=payload, schema=schema)
+
+
+def test_disk_raw_schema_accepts_v2_payload():
+    module = load_transcribe_module()
+    schema = module.load_disk_raw_schema()
+    payload = {
+        'schema_version': 2,
+        'lines': [
+            {
+                'page_number': 1,
+                'text': 'ok',
+                'line_box': {'ymin': 0, 'xmin': 0, 'ymax': 100, 'xmax': 100},
+                'ai_confidence_label': 'high',
+                'ai_notes': '',
+            }
+        ],
+        'confidence_score': 1.0,
+        'confidence_label': 'high',
+    }
+    jsonschema.validate(instance=payload, schema=schema)

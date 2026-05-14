@@ -15,13 +15,18 @@ from PIL import Image
 
 # Line review rasterizes chunk files at this DPI so crop geometry is stable
 # across machines. Pass 1 sends the PDF bytes to the model; Gemini's internal render may
-# differ slightly — ``box_2d`` crops in the UI are best-effort vs page aspect ratio.
+# differ slightly — line crops in the UI are best-effort vs page aspect ratio.
 REVIEW_PDF_RASTER_DPI = 200
 
-# Normalized coordinate grid for ``box_2d`` (Pass 1 / model convention). The reviewer
-# maps ``ymin``/``ymax`` to the page pixmap for vertical centering and uses the full
-# quad for the highlight rectangle.
+# Normalized coordinate grid for line geometry (0–1000). ``schema_version`` 2 uses
+# ``line_box`` objects on disk; legacy files use ``box_2d`` arrays with the same numbers.
 BOX_2D_NORMALIZED_MAX = 1000
+TRANSCRIPTION_SCHEMA_VERSION_V2 = 2
+
+# ``line_aabb_norm`` names the four-int list ``[ymin, xmin, ymax, xmax]`` on the
+# ``0 .. BOX_2D_NORMALIZED_MAX`` grid: values read from ``line_box`` (v2) or legacy
+# ``box_2d``, before scaling to pixel crops in ``clamp_box_2d_to_pixels`` or when
+# building ``line_box`` dicts from normalized bounds.
 
 # Padding around the clamped model box for line crops (preview comfort). Too much
 # bottom padding pulls in the next line when line spacing is tight.
@@ -38,36 +43,8 @@ CROP_PAD_X_MIN_PX = 1
 CROP_PAD_X_BOX_W_DIVISOR = 50
 CROP_PAD_X_BOX_W_OFFSET = 1
 
-# Why this "snap-to-ink" layer exists (and why we do not rely on model `box_2d` alone):
-#
-# In practice, VLMs (Vision Language Models) do not mathematically calculate bounding boxes
-# based on image pixels. Instead, they estimate coordinates based on the "patches" of the
-# image they process as tokens.
-#
-# This leads to several common spatial desync issues, especially on dense historical pages:
-# 1. The transcription includes more (or fewer) lines of text than there are distinct
-#    visible bounding boxes.
-# 2. Adjacent lines are merged into a single box, or some line boxes are skipped entirely.
-# 3. "Coordinate Drift": As the model moves down the page, small estimation errors compound,
-#    causing the returned `box_2d` coordinates to drift significantly below the actual text.
-#
-# That drift can become severe enough that a mid-page line highlights near unrelated
-# content. Therefore, the `box_2d` is an approximate layout signal; it is useful
-# as a coarse anchor, but not accurate enough for a deterministic human-in-the-loop UI.
-#
-# The projection-profile "snap" step addresses this by:
-# 1. Using the model's `box_2d` *only* to identify a local vertical search neighborhood.
-# 2. Detecting where dark pixels (actual printed ink) are concentrated in that area.
-# 3. "Snapping" the vertical bounds to the nearest real text band.
-#
-# We intentionally keep this Pillow-based and local-windowed:
-# - Pillow keeps dependencies light for this toolchain.
-# - Local search avoids accidentally snapping to nearby paragraphs or adjacent columns.
-# - If the projection profile confidence is weak, callers can fall back to the original box.
-#
-# During the transcription phase (`transcribe-chunk.py`), this successful snap output
-# is written back into the JSON payload's `box_2d` so the reviewer UI code remains simple,
-# fast, and perfectly aligned at runtime.
+# Snap-to-ink: optional Pillow projection refinement on a coarse axis-aligned box
+# (used as a fallback when PaddleOCR is unavailable or no detection matches a line).
 # Snap-to-ink tuning for line-level projection profiling.
 SNAP_DARK_PIXEL_THRESHOLD = 175
 SNAP_SMOOTH_RADIUS = 2
@@ -352,6 +329,51 @@ def clamp_box_2d_to_pixels(
     return left, upper, right, lower
 
 
+def line_box_dict_from_normalized_aabb(line_aabb_norm: list[int]) -> dict:
+    """Build on-disk ``line_box`` from normalized AABB ``line_aabb_norm``.
+
+    ``line_aabb_norm`` is ``[ymin, xmin, ymax, xmax]`` integers on
+    ``0 .. BOX_2D_NORMALIZED_MAX`` (same order as legacy ``box_2d``).
+    """
+    ymin, xmin, ymax, xmax = line_aabb_norm
+    return {
+        'ymin': int(ymin),
+        'xmin': int(xmin),
+        'ymax': int(ymax),
+        'xmax': int(xmax),
+    }
+
+
+def line_aabb_four_ints(line: dict) -> list[int] | None:
+    """Return ``line_aabb_norm`` (``[ymin, xmin, ymax, xmax]``) or ``None`` if invalid.
+
+    Reads ``line_box`` (v2) when present, otherwise legacy ``box_2d``.
+    """
+    lb = line.get('line_box')
+    if isinstance(lb, dict):
+        try:
+            return [
+                int(lb['ymin']),
+                int(lb['xmin']),
+                int(lb['ymax']),
+                int(lb['xmax']),
+            ]
+        except (KeyError, TypeError, ValueError):
+            return None
+    legacy = line.get('box_2d')
+    if isinstance(legacy, list) and len(legacy) == 4:
+        try:
+            return [
+                int(legacy[0]),
+                int(legacy[1]),
+                int(legacy[2]),
+                int(legacy[3]),
+            ]
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _parse_box_2d(box_2d: object) -> tuple[float, float, float, float] | None:
     # Keep this permissive (float parse) because upstream model output can drift
     # between ints/floats/strings depending on provider behavior.
@@ -508,7 +530,7 @@ def line_text(line: dict) -> str:
 def load_page_images(pdf_path: Path) -> list[Image.Image]:
     """Rasterize each PDF page to a PIL image at :data:`REVIEW_PDF_RASTER_DPI`."""
     # Snap-to-ink and the line reviewer both consume these rasters; keep DPI in one place
-    # so ``box_2d`` written at transcription time matches review pixmap geometry.
+    # so ``line_box`` written at transcription time matches review pixmap geometry.
     try:
         import pypdfium2 as pdfium
     except ImportError as exc:
@@ -535,7 +557,7 @@ def load_page_images(pdf_path: Path) -> list[Image.Image]:
 
 def load_payload(raw_path: Path, final_path: Path) -> dict:
     # Prefer final when it exists so reopening the chunk loads saved review work, not stale raw.
-    # Line sync reads ``lines[].box_2d`` / ``page_number`` from this payload as-is.
+    # Line sync reads ``lines[].line_box`` (or legacy ``box_2d``) / ``page_number`` as-is.
     if final_path.exists():
         return json.loads(final_path.read_text(encoding='utf-8'))
     return json.loads(raw_path.read_text(encoding='utf-8'))
@@ -555,10 +577,9 @@ def crop_for_line(
     line: dict,
 ) -> tuple[Image.Image | None, str | None]:
     """Build a PIL crop for one payload line, or return (None, error_message)."""
-    # Same ``page_number`` / ``box_2d`` contract as the line reviewer; padding is only
+    # Same ``page_number`` / line geometry contract as the line reviewer; padding is only
     # from ``clamp_box_2d_to_pixels``, not the review UI's highlight expansion.
     page_number = line.get('page_number')
-    box_2d = line.get('box_2d')
     n_pages = len(page_images)
 
     if not isinstance(page_number, int) or page_number < 1:
@@ -568,27 +589,26 @@ def crop_for_line(
             f'page_number {page_number} is out of range '
             f'(chunk has {n_pages} page(s)).'
         )
-    if not isinstance(box_2d, list) or len(box_2d) != 4:
-        return None, f'Invalid box_2d: {box_2d!r}'
+    # line_aabb_norm: normalized axis-aligned bounds for this line (see module comment).
+    line_aabb_norm = line_aabb_four_ints(line)
+    if line_aabb_norm is None:
+        return None, f'Invalid line_box / box_2d: {line.get("line_box")!r} {line.get("box_2d")!r}'
 
     page_img = page_images[page_number - 1]
     w, h = page_img.size
-    left, upper, right, lower = clamp_box_2d_to_pixels(box_2d, w, h)
+    left, upper, right, lower = clamp_box_2d_to_pixels(line_aabb_norm, w, h)
     return page_img.crop((left, upper, right, lower)), None
 
 
 def normalized_center_y_for_line(line: dict) -> float | None:
     """Return line vertical center on the 0-1000 grid, or ``None`` if invalid."""
     # Drives reviewer vertical scroll only; ``xmin``/``xmax`` are ignored here.
-    box_2d = line.get('box_2d')
-    if not isinstance(box_2d, list) or len(box_2d) != 4:
+    # line_aabb_norm: normalized axis-aligned bounds (see module comment).
+    line_aabb_norm = line_aabb_four_ints(line)
+    if line_aabb_norm is None:
         return None
-    try:
-        ymin = float(box_2d[0])
-        ymax = float(box_2d[2])
-    except (TypeError, ValueError):
-        return None
-    return max(0.0, min(float(BOX_2D_NORMALIZED_MAX), (ymin + ymax) / 2.0))
+    ymin, _xmin, ymax, _xmax = line_aabb_norm
+    return max(0.0, min(float(BOX_2D_NORMALIZED_MAX), (float(ymin) + float(ymax)) / 2.0))
 
 
 def line_confidence_label(line: dict) -> str | None:
@@ -645,7 +665,7 @@ class ChunkLinesSession:
         # On failure below (or invalid payload), return without mutating ``self`` so a
         # previously loaded chunk remains active (do not clear the session at the start).
         try:
-            # ``page_images`` and ``lines[].box_2d`` share the ``REVIEW_PDF_RASTER_DPI`` space.
+            # ``page_images`` and line geometry share the ``REVIEW_PDF_RASTER_DPI`` space.
             page_images = load_page_images(resolved.chunk_path)
             payload = load_payload(resolved.raw_path, resolved.final_path)
             raw_payload = load_raw_payload(resolved.raw_path)

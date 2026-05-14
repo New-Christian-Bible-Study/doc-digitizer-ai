@@ -13,6 +13,7 @@ from chunk_lines_model import (
     line_text,
     line_confidence_label,
     line_notes,
+    line_aabb_four_ints,
     normalized_center_y_for_line,
     resolve_chunk_pdf_dir,
     resolve_transcription_paths_for_chunk,
@@ -49,6 +50,18 @@ def test_review_pdf_raster_dpi_is_pinned():
 
 def test_normalized_center_y_for_line_returns_midpoint():
     assert normalized_center_y_for_line({'box_2d': [120, 10, 220, 80]}) == 170.0
+    assert (
+        normalized_center_y_for_line(
+            {'line_box': {'ymin': 120, 'xmin': 10, 'ymax': 220, 'xmax': 80}},
+        )
+        == 170.0
+    )
+
+
+def test_line_aabb_four_ints_prefers_line_box():
+    lb = {'ymin': 1, 'xmin': 2, 'ymax': 3, 'xmax': 4}
+    assert line_aabb_four_ints({'line_box': lb, 'box_2d': [9, 9, 9, 9]}) == [1, 2, 3, 4]
+    assert line_aabb_four_ints({'box_2d': [5, 6, 7, 8]}) == [5, 6, 7, 8]
 
 
 def test_line_confidence_label_normalizes_and_validates():
@@ -150,7 +163,8 @@ def test_low_confidence_unchanged_stats_counts_only_low():
 def test_reload_from_raw_restores_missing_confidence_metadata(tmp_path: Path):
     raw_path = tmp_path / 'chunk_raw.json'
     raw_path.write_text(
-        '{"lines":[{"page_number":1,"text":"line one","box_2d":[0,0,10,10]}]}',
+        '{"schema_version":2,"lines":[{"page_number":1,"text":"line one",'
+        '"line_box":{"ymin":0,"xmin":0,"ymax":10,"xmax":10}}]}',
         encoding='utf-8',
     )
 
@@ -160,7 +174,7 @@ def test_reload_from_raw_restores_missing_confidence_metadata(tmp_path: Path):
         {
             'page_number': 1,
             'text': 'line one',
-            'box_2d': [0, 0, 10, 10],
+            'line_box': {'ymin': 0, 'xmin': 0, 'ymax': 10, 'xmax': 10},
             'ai_confidence_label': 'medium',
             'ai_notes': 'faded text',
         }
@@ -179,7 +193,8 @@ def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflic
     raw_path = tmp_path / 'chunk_raw.json'
     raw_path.write_text(
         (
-            '{"lines":[{"page_number":1,"text":"line one","box_2d":[0,0,10,10],'
+            '{"schema_version":2,"lines":[{"page_number":1,"text":"line one",'
+            '"line_box":{"ymin":0,"xmin":0,"ymax":10,"xmax":10},'
             '"ai_confidence_label":"high","ai_notes":""}]}'
         ),
         encoding='utf-8',
@@ -191,7 +206,7 @@ def test_reload_from_raw_preserves_existing_confidence_metadata_when_raw_conflic
         {
             'page_number': 1,
             'text': 'line one',
-            'box_2d': [0, 0, 10, 10],
+            'line_box': {'ymin': 0, 'xmin': 0, 'ymax': 10, 'xmax': 10},
             'ai_confidence_label': 'medium',
             'ai_notes': 'faded text',
         }
@@ -213,14 +228,18 @@ def test_reload_from_raw_restores_confidence_when_indices_shift():
         {
             'page_number': 1,
             'text': 'line one',
-            'box_2d': [0, 0, 10, 10],
+            'line_box': {'ymin': 0, 'xmin': 0, 'ymax': 10, 'xmax': 10},
             'ai_confidence_label': 'medium',
             'ai_notes': 'faded text',
         },
     ]
     session.payload = {
         'lines': [
-            {'page_number': 1, 'text': 'line one', 'box_2d': [0, 0, 10, 10]},
+            {
+                'page_number': 1,
+                'text': 'line one',
+                'line_box': {'ymin': 0, 'xmin': 0, 'ymax': 10, 'xmax': 10},
+            },
         ]
     }
     session.lines = session.payload['lines']

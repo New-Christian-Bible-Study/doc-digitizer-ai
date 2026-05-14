@@ -17,6 +17,7 @@ datas = [
 for schema_name in (
     'raw-transcription.schema.json',
     'final-transcription.schema.json',
+    'pass-1-transcription.schema.json',
 ):
     schema_path = ROOT / schema_name
     if schema_path.is_file():

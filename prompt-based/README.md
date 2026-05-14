@@ -102,11 +102,18 @@ Default output naming:
 
 `transcribe-chunk.py` transcribes a file from `chunk-pdfs/` (or from **`--chunk-dir`**) into:
 
-- `transcriptions/<chunk_stem>_raw.json` — per-line text with `box_2d` coordinates (Pass 1)
+- `transcriptions/<chunk_stem>_raw.json` — per-line text with `line_box` (schema_version 2; PaddleOCR-derived AABB on a 0–1000 grid after Pass 1)
 - `transcriptions/<chunk_stem>_summary.md`
 
-By default a Gemini model is used to do the transcription. 
-To create a Gemini API key: [Google AI Studio - Get API key](https://ai.google.dev/gemini-api/docs/api-key)
+By default a Gemini model is used for Pass 1 text. **Line geometry** comes from PaddleOCR detection on the same 200 DPI rasters as review (install [../requirements-paddleocr.txt](../requirements-paddleocr.txt) in addition to [../requirements.txt](../requirements.txt)). If Paddle is not installed, transcribe falls back to snap-to-ink on the VLM’s coarse `anchor_box_2d` only.
+
+To upgrade older `*_raw.json` / `*_final.json` files that still use legacy `box_2d`, run:
+
+```bash
+python prompt-based/convert-transcription-boxes.py path/to/file_raw.json
+```
+
+Use `--in-place` to overwrite, or `--chunk-pdf path/to/chunk.pdf` to re-run Paddle and refresh boxes after the numeric migration.
 
 ### Specifying the API key to use
 
@@ -147,7 +154,7 @@ This step does **not** call the model. You still run `transcribe-chunk.py` first
 - top-level `review_complete` boolean (set to `true` only from the explicit completion flow)
 - per-editable-line `reviewer_changed` boolean (whether reviewer changed that line compared with raw text)
 
-The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Pass 1 sends the **PDF** to the model, while the UI uses a local PDF rasterizer (`pypdfium2`) — normalized `box_2d` line crops are **best-effort** aligned to the page aspect ratio; Gemini’s internal render may differ slightly.
+The reviewer rasterizes each page at a fixed DPI (see `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`) so line crops are consistent across environments. Each line’s **`line_box`** (`ymin`, `xmin`, `ymax`, `xmax` on a 0–1000 grid) drives crops and highlights; legacy files with **`box_2d`** arrays are still accepted until migrated.
 
 `--working-dir` is the same as for `transcribe-chunk.py`: the directory that holds `transcriptions/` and usually `source-pdfs/` / config (not those subfolders themselves). Chunk PDFs default to `<working-dir>/chunk-pdfs/` unless you pass **`--chunk-dir`**.
 

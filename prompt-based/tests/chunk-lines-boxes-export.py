@@ -27,6 +27,7 @@ from PIL import Image, ImageDraw, ImageFont
 from chunk_lines_model import (
     clamp_box_2d_to_pixels,
     is_injected_page_marker,
+    line_aabb_four_ints,
     load_page_images,
     load_payload,
     resolve_chunk_pdf_dir,
@@ -179,12 +180,12 @@ def render_page_with_boxes(
         if is_injected_page_marker(line.get('text', '')):
             continue
         pn = line.get('page_number')
-        box_2d = line.get('box_2d')
+        four = line_aabb_four_ints(line)
         if not isinstance(pn, int) or pn != page_number:
             continue
-        if not isinstance(box_2d, list) or len(box_2d) != 4:
+        if four is None:
             continue
-        left, upper, right, lower = clamp_box_2d_to_pixels(box_2d, w, h)
+        left, upper, right, lower = clamp_box_2d_to_pixels(four, w, h)
         color = BOX_OUTLINE_COLORS[color_i % len(BOX_OUTLINE_COLORS)]
         color_i += 1
         draw.rectangle(

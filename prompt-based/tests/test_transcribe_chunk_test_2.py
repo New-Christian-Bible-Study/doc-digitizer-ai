@@ -34,11 +34,13 @@ def test_live_integration_test_2_produces_raw_json_with_lines():
     raw_payload = json.loads(TEST_2_OUTPUT_PATH.read_text(encoding='utf-8'))
     assert isinstance(raw_payload.get('lines'), list)
     assert len(raw_payload['lines']) >= 1
+    assert raw_payload.get('schema_version') == 2
     for line in raw_payload['lines']:
         assert 'page_number' in line
         assert 'text' in line
-        assert isinstance(line.get('box_2d'), list)
-        assert len(line['box_2d']) == 4
+        lb = line.get('line_box')
+        assert isinstance(lb, dict)
+        assert {'ymin', 'xmin', 'ymax', 'xmax'} <= set(lb.keys())
 
 
 if __name__ == '__main__':

@@ -1,18 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "IDP Raw Line Transcription Response",
-  "description": "Pass 1 response: per-line text with spatial boxes and confidence metadata",
+  "title": "IDP Raw Line Transcription (on disk)",
+  "description": "Saved *_raw.json after PaddleOCR line boxes (schema_version 2)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["lines", "confidence_score", "confidence_label"],
+  "required": ["schema_version", "lines", "confidence_score", "confidence_label"],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Transcription JSON geometry revision"
+    },
     "lines": {
       "type": "array",
       "description": "One object per visible text line in reading order",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["page_number", "text", "box_2d"],
+        "required": ["page_number", "text", "line_box"],
         "properties": {
           "page_number": {
             "type": "integer",
@@ -23,16 +28,33 @@
             "type": "string",
             "description": "Transcription for this line"
           },
-          "box_2d": {
-            "type": "array",
-            "description": "[ymin, xmin, ymax, xmax] normalized 0-1000",
-            "items": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 1000
-            },
-            "minItems": 4,
-            "maxItems": 4
+          "line_box": {
+            "type": "object",
+            "description": "Axis-aligned line region normalized 0-1000 (PaddleOCR-derived)",
+            "additionalProperties": false,
+            "required": ["ymin", "xmin", "ymax", "xmax"],
+            "properties": {
+              "ymin": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "xmin": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "ymax": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "xmax": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            }
           },
           "ai_confidence_label": {
             "type": "string",

@@ -36,6 +36,7 @@ from prompt_based.review_chunk_args import parse_cli_args
 from prompt_based.chunk_lines_model import (
     BOX_2D_NORMALIZED_MAX,
     ChunkLinesSession,
+    line_aabb_four_ints,
     line_confidence_label,
     line_notes,
     list_chunk_filenames,
@@ -511,16 +512,16 @@ class ReviewMainWindow(QMainWindow):
         if self._page_pixmap is None or self._page_pixmap.isNull():
             self._active_line_box_item.setVisible(False)
             return
-        box_2d = line.get('box_2d')
-        if not isinstance(box_2d, list) or len(box_2d) != 4:
+        four = line_aabb_four_ints(line)
+        if four is None:
             self._active_line_box_item.setVisible(False)
             return
 
         try:
-            ymin = float(box_2d[0])
-            xmin = float(box_2d[1])
-            ymax = float(box_2d[2])
-            xmax = float(box_2d[3])
+            ymin = float(four[0])
+            xmin = float(four[1])
+            ymax = float(four[2])
+            xmax = float(four[3])
         except (TypeError, ValueError):
             self._active_line_box_item.setVisible(False)
             return
@@ -933,7 +934,8 @@ class ReviewChunkLinesController:
         return True
 
     def _show_line(self) -> None:
-        # Line/image sync uses only persisted ``page_number`` and ``box_2d``; no OCR
+        # Line/image sync uses only persisted ``page_number`` and ``line_box`` (or legacy
+        # ``box_2d``); no OCR
         # or re-snap at focus time.
         self._session.clamp_editable_ridx()
         s = self._session

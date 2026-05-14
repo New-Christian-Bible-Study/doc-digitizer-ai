@@ -2,111 +2,101 @@
 
 How transcribed lines stay aligned with the page image during review, and where to change behavior when improving accuracy.
 
-**Code:** `prompt-based/transcribe-chunk.py`, `prompt-based/chunk_lines_model.py`, `prompt-based/review-chunk.py`
+**Code:** `prompt-based/transcribe-chunk.py`, `prompt-based/prompt_based/paddle_line_boxes.py`, `prompt-based/chunk_lines_model.py`, `prompt-based/review-chunk.py`, `prompt-based/convert-transcription-boxes.py`
 
-## End-to-End Sequence
+## Pipeline overview
+
+One run of **transcribe-chunk** writes (or overwrites) `*_raw.json` on disk. **review-chunk** loads that JSON (or `*_final.json` when present) and keeps the page image aligned with the focused line. The next two diagrams cover **raw transcription** on disk, then the **review UI** path from raw toward final transcription.
 
 ```mermaid
-sequenceDiagram
-    participant transcribe as transcribe-chunk.py
-    participant modelHelpers as chunk_lines_model.py
-    participant rawJson as RawJSON(*_raw.json)
-    participant reviewer as review-chunk.py
-    participant session as ChunkLinesSession
-    participant ui as ReviewUI(QGraphicsView)
-
-    transcribe->>modelHelpers: load_page_images(chunkPdf, dpi=REVIEW_PDF_RASTER_DPI)
-    loop for each line
-        transcribe->>modelHelpers: snap_box_2d_to_ink(pageImage, box_2d)
-        alt snap succeeds
-            modelHelpers-->>transcribe: snapped box_2d
-            transcribe->>rawJson: replace line.box_2d
-        else snap weak/invalid
-            modelHelpers-->>transcribe: None
-            transcribe->>rawJson: keep model box_2d
-        end
-    end
-
-    reviewer->>session: load_chunk(chunkName)
-    session->>modelHelpers: load_payload(raw, final_if_exists)
-    session->>modelHelpers: editable_line_indices(lines)
-    reviewer->>ui: populate right-pane editable lines
-
-    loop when active row changes
-        reviewer->>session: line_at_editable_ridx()
-        reviewer->>ui: set_page_image(pageRasterOrNone)
-        reviewer->>ui: show_active_line_box(line)
-        reviewer->>ui: set_active_row(ridx)
-        reviewer->>ui: schedule_align_image_to_active_row(ridx, line)
-        Note over ui: Deferred align maps highlight center to the active QLineEdit center in the page viewport; see Runtime UI Focus Sequence.
-    end
+flowchart LR
+  T[Transcribe] --> D[(chunk JSON on disk)]
+  D --> R[Review]
 ```
 
-## Runtime UI Focus Sequence
+### Raw transcription
+
+Pass 1 is the vision model’s structured JSON (`pass-1-transcription.schema.json`). After Paddle fills `line_box`, the payload is checked against `raw-transcription.schema.json` and written as `*_raw.json`.
 
 ```mermaid
 sequenceDiagram
-    participant editor as FocusLineEdit
-    participant controller as ReviewChunkLinesController
-    participant session as ChunkLinesSession
-    participant view as ReviewMainWindow
-    participant geometry as chunk_lines_model.py
+    participant tc as Transcribe CLI
+    participant p1 as Pass 1 schema
+    participant pdl as Paddle matcher
+    participant clm as chunk_lines_model
+    participant val as Raw JSON schema
+    participant out as raw JSON file
 
-    editor->>controller: _on_row_focused(ridx)
-    controller->>session: set editable_ridx
-    controller->>controller: _show_line()
-    controller->>session: line_at_editable_ridx()
-    session-->>controller: active line
+    tc->>p1: LiteLLM response_format plus jsonschema validate
+    tc->>pdl: assign_paddle_line_boxes(chunkPdf, lines)
+    pdl->>clm: load_page_images (det rasters)
+    Note over pdl: PaddleOCR det polys to AABB, greedy match per page to anchor_box_2d, write line_box
+    tc->>val: jsonschema validate payload with schema_version 2
+    tc->>out: write *_raw.json
+```
 
-    alt page_number valid
-        controller->>view: set_page_image(page_images[page_number-1])
-    else page_number invalid/missing
-        controller->>view: set_page_image(None)
+### Review UI: raw to final transcription
+
+This is not a second LLM pass. The reviewer loads `*_raw.json` (and uses `*_final.json` when it already exists), lets you edit lines in the UI, and writes `*_final.json` when you save or mark review complete. Row focus drives the page image, highlight, and scroll alignment so text and image stay in sync while you work.
+
+```mermaid
+sequenceDiagram
+    participant rev as Review app
+    participant ses as Line session
+    participant clm as chunk_lines_model
+    participant pv as Page image view
+
+    rev->>ses: load_chunk(chunkName)
+    ses->>clm: load_payload(raw_path, final_path)
+    ses->>clm: editable_line_indices(lines)
+    rev->>pv: populate right-pane editable lines
+
+    loop when active row changes
+        rev->>ses: line_at_editable_ridx()
+        rev->>pv: set_page_image(pageRasterOrNone)
+        rev->>pv: show_active_line_box(line)
+        rev->>pv: set_active_row(ridx)
+        rev->>pv: schedule_align_image_to_active_row(ridx, line)
+        Note over pv: Deferred align maps highlight center to the active QLineEdit center in the page viewport (see Reviewer Behavior below).
     end
-
-    controller->>view: show_active_line_box(line)
-    controller->>view: set_active_row(ridx)
-    Note over view: ensureWidgetVisible on the focused QLineEdit
-    controller->>view: schedule_align_image_to_active_row(ridx, line)
-    Note over view: QTimer.singleShot(0) so list scroll finishes before mapTo
-    view->>view: align_image_to_active_row(ridx, line)
-    alt highlight visible
-        view->>view: centerOn adjusted Y so box center matches editor center in viewport
-    else no valid box_2d
-        view->>geometry: normalized_center_y_for_line(line)
-        alt normalized center exists
-            geometry-->>view: centerY(0..1000)
-            view->>view: center_page_on_normalized_y(centerY)
-        else center missing
-            view-->>view: skip vertical scroll
-        end
-    end
-
-    controller->>view: set_prev_next_enabled(...)
 ```
 
 ## Big Picture
 
-1. **Transcription:** Optionally refine each line’s `box_2d` against the rasterized page (snap-to-ink), then write JSON.
-2. **Review:** Load that JSON and PDF rasters at a fixed DPI. For the focused line, pick the page from `page_number`, draw a highlight from `box_2d`, and **scroll the image** so the highlight’s **vertical center** lines up with the **vertical center of the active line editor** in the left pane’s viewport (so the reviewer can scan mostly left–right). Extra **scene padding** above and below the page pixmap makes that possible even for lines at the bottom of the page. If there is no drawable box, the view falls back to `center_page_on_normalized_y()` using `normalized_center_y_for_line()`. There is no live OCR or text–image matching in the reviewer.
+1. **Transcription:** Pass 1 (VLM) returns text plus coarse `anchor_box_2d` (validated with `pass-1-transcription.schema.json`). PaddleOCR detection fills **`line_box`** per line (or snap-to-ink fallback on the anchor when Paddle is missing or no detection matches). The saved `*_raw.json` is validated with `raw-transcription.schema.json` (`schema_version` 2).
+2. **Review:** Load that JSON and PDF rasters at a fixed DPI. For the focused line, pick the page from `page_number`, draw a highlight from **`line_box`** (or legacy **`box_2d`**), and **scroll the page image (left pane)** so the highlight’s **vertical center** lines up with the **vertical center of the active line editor (right pane)** once that editor is mapped into the page view—so the reviewer can scan mostly **horizontally between image and transcript**. Extra **scene padding** above and below the page pixmap makes that possible even for lines at the bottom of the page. If there is no drawable box, the view falls back to `center_page_on_normalized_y()` using `normalized_center_y_for_line()`. There is no live OCR or text–image matching in the reviewer.
 
 `payload['lines']` is the `lines` array in `*_final.json` or `*_raw.json`, loaded by `ChunkLinesSession.load_chunk()` → `load_payload()` in `chunk_lines_model.py`.
 
 ## Data Contract
 
+On-disk **`schema_version`:** `2` at the root of `*_raw.json` / `*_final.json`.
+
 Each line needs at least:
 
 - `page_number` — 1-based index into the chunk PDF
 - `text`
-- `box_2d` — `[ymin, xmin, ymax, xmax]` on a **0–1000** grid (`BOX_2D_NORMALIZED_MAX`)
+- **`line_box`** — object with integer `ymin`, `xmin`, `ymax`, `xmax` on a **0–1000** grid (`BOX_2D_NORMALIZED_MAX`)
 
-Review maps that grid to the current page pixmap size. The full box drives the highlight rectangle. **Scroll alignment** uses the **center** of that highlight (in scene coordinates) versus the **center** of the focused `QLineEdit` mapped into the page view’s viewport. **`normalized_center_y_for_line()`** (from `(ymin + ymax) / 2` on the 0–1000 grid) is used for **fallback** scrolling when `box_2d` is missing or invalid.
+Legacy files may still use **`box_2d`** as a four-int array; `line_aabb_four_ints()` in `chunk_lines_model.py` reads either shape.
 
-## Box Adjustment (snap-to-ink)
+Review maps that grid to the current page pixmap size. The full box drives the highlight rectangle. **Scroll alignment** uses the **center** of that highlight (in scene coordinates) versus the **center** of the focused `QLineEdit` mapped into the page view’s viewport. **`normalized_center_y_for_line()`** (from `(ymin + ymax) / 2` on the 0–1000 grid) is used for **fallback** scrolling when geometry is missing or invalid.
 
-**Why:** VLM `box_2d` is a coarse layout hint (patch-based estimates can drift, merge, or skip lines). Snap-to-ink uses a **local** vertical ink profile (i.e., it counts the dark pixels across each horizontal row to mathematically find the densest "peak" of the actual text band) so review scroll/highlight tracks real text bands better. Rationale is spelled out in comments at the top of `chunk_lines_model.py`.
+## Pass 1 vs on-disk schema
 
-**What:** `snap_line_boxes_to_ink()` in `transcribe-chunk.py` calls `snap_box_2d_to_ink()` per line. On success it replaces `line['box_2d']`; on failure the model box is left unchanged. **Only vertical bounds are snapped; horizontal `xmin`/`xmax` stay as returned by the model.** Details (thresholds, peak pick, valley growth) live in `snap_box_2d_to_ink()`.
+LiteLLM `response_format` uses **`pass-1-transcription.schema.json`** (lines include `anchor_box_2d`, not final `line_box`). After Paddle assignment, `transcribe-chunk.py` validates the full document with **`raw-transcription.schema.json`** before writing.
+
+## Box geometry (PaddleOCR + matcher)
+
+**Detection:** `paddle_line_boxes.detect_page_aabbs_px()` runs PaddleOCR with `det=True`, `rec=False` on the same rasters as review.
+
+**Matching:** Per page, transcript lines stay in JSON order. Each line’s `anchor_box_2d` maps to the best **unused** detection by IoU in pixel space (with a nearest-center fallback when IoU is weak). This avoids pairing purely by sorted box order when the VLM omits regions Paddle still finds.
+
+**Fallback:** If Paddle is not installed, if a page has no detections, or if no unused detection is chosen for a line, the code runs `snap_box_2d_to_ink()` on the normalized anchor. A non-`None` snap result becomes `line_box`; if snap returns `None`, `line_box` is built from the anchor’s four ints (see Failure Modes).
+
+## Legacy migration
+
+`convert-transcription-boxes.py` upgrades `box_2d` → `line_box` and sets `schema_version`. Optional **`--chunk-pdf`** re-runs Paddle matching for better alignment.
 
 ## Reviewer Behavior
 
@@ -135,14 +125,15 @@ Highlight padding in `show_active_line_box()` is **UI-only** and separate from c
 ## Failure Modes (short)
 
 - Bad `page_number` → no page image
-- Bad `box_2d` → no highlight; alignment falls back to `normalized_center_y_for_line` when possible, otherwise vertical scroll is skipped
-- Snap returns `None` → original `box_2d` kept
+- Bad `line_box` / `box_2d` → no highlight; alignment falls back to `normalized_center_y_for_line` when possible, otherwise vertical scroll is skipped
+- Snap returns `None` (no ink shrink) → `line_box` is built from the anchor’s normalized four ints (`assign_line_boxes_for_page` in `paddle_line_boxes.py`)
 
 ## Tuning and Verification
 
 - **Snap and crop:** `SNAP_*`, `CROP_PAD_*`, `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`
+- **Paddle match:** `IOU_MIN_CONFIDENT_MATCH` in `paddle_line_boxes.py` (tiny IoU still falls back to nearest-center pairing)
 - **Review highlight:** padding in `show_active_line_box()` in `review-chunk.py`
 - **Review vertical padding:** margin added in `_update_scene_vertical_padding()` in `review-chunk.py` (viewport-sized slack for bottom-line alignment)
 - **Tests / visuals:** `prompt-based/tests/test_chunk_lines_model.py`, `prompt-based/tests/chunk-lines-boxes-export.py`
 
-After changing snap logic or constants, re-run transcription for affected chunks so `*_raw.json` picks up new boxes, then spot-check in the reviewer.
+After changing snap logic, matcher, or crop constants, re-run transcription (or `convert-transcription-boxes.py --chunk-pdf`) for affected chunks so `*_raw.json` picks up new boxes, then spot-check in the reviewer.

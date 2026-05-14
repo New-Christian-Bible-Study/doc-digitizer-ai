@@ -19,14 +19,16 @@ from pypdf import PdfReader
 
 from prompt_based.chunk_generator import ChunkGenerator
 from prompt_based.chunk_lines_model import (
+    TRANSCRIPTION_SCHEMA_VERSION_V2,
     list_chunk_filenames,
-    load_page_images,
     resolve_chunk_pdf_dir,
-    snap_box_2d_to_ink,
 )
 
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
-RAW_SCHEMA_PATH = SCRIPT_DIR / 'raw-transcription.schema.json'
+# Pass 1: JSON schema for the vision LLM completion (lines + anchor_box_2d, confidence, notes).
+PASS1_SCHEMA_PATH = SCRIPT_DIR / 'pass-1-transcription.schema.json'
+# After Paddle line boxes and schema_version are applied, the payload we write to *_raw.json must match this.
+DISK_RAW_SCHEMA_PATH = SCRIPT_DIR / 'raw-transcription.schema.json'
 TRANSCRIBE_CONFIG_FILENAME = 'transcribe.config.json'
 VALID_REASONING_EFFORTS = ('none', 'disable', 'low', 'medium', 'high', 'minimal')
 VALID_MEDIA_RESOLUTIONS = ('low', 'medium', 'high', 'ultra_high', 'auto')
@@ -59,8 +61,13 @@ def reorder_runtime_log_event_dict(_logger, _method_name, event_dict):
     return event_dict
 
 
-def load_schema() -> dict:
-    with RAW_SCHEMA_PATH.open('r', encoding='utf-8') as schema_file:
+def load_pass1_schema() -> dict:
+    with PASS1_SCHEMA_PATH.open('r', encoding='utf-8') as schema_file:
+        return json.load(schema_file)
+
+
+def load_disk_raw_schema() -> dict:
+    with DISK_RAW_SCHEMA_PATH.open('r', encoding='utf-8') as schema_file:
         return json.load(schema_file)
 
 
@@ -352,7 +359,7 @@ def normalize_transcription_newlines(transcription: object) -> str:
     return normalized
 
 
-def normalize_lines_from_model(raw_lines: object) -> list[dict]:
+def normalize_lines_from_pass1(raw_lines: object) -> list[dict]:
     if not isinstance(raw_lines, list):
         return []
 
@@ -364,7 +371,7 @@ def normalize_lines_from_model(raw_lines: object) -> list[dict]:
             {
                 'page_number': item.get('page_number'),
                 'text': normalize_transcription_newlines(item.get('text', '')),
-                'box_2d': item.get('box_2d'),
+                'anchor_box_2d': item.get('anchor_box_2d'),
                 'ai_confidence_label': item.get('ai_confidence_label'),
                 'ai_notes': item.get('ai_notes', ''),
             }
@@ -372,19 +379,20 @@ def normalize_lines_from_model(raw_lines: object) -> list[dict]:
     return normalized
 
 
-def build_llm_payload_for_validation(raw: dict) -> dict:
+def build_llm_payload_for_pass1_validation(raw: dict) -> dict:
     return {
-        'lines': normalize_lines_from_model(raw.get('lines')),
+        'lines': normalize_lines_from_pass1(raw.get('lines')),
         'confidence_score': raw.get('confidence_score'),
         'confidence_label': raw.get('confidence_label'),
     }
 
 
-def build_full_transcription_payload(
+def build_disk_transcription_payload(
     llm_payload: dict,
     transcribe_config: dict,
 ) -> dict:
     return {
+        'schema_version': TRANSCRIPTION_SCHEMA_VERSION_V2,
         'lines': llm_payload['lines'],
         'confidence_score': llm_payload['confidence_score'],
         'confidence_label': llm_payload['confidence_label'],
@@ -395,32 +403,6 @@ def build_full_transcription_payload(
             f'reasoning_effort={transcribe_config["reasoning_effort"]}'
         ),
     }
-
-
-def snap_line_boxes_to_ink(chunk_path: Path, lines: list[dict]) -> str | None:
-    """Replace each line's ``box_2d`` with snap-to-ink bounds when detection succeeds."""
-    # Only automated step that mutates ``box_2d`` before review (aside from manual
-    # JSON edits). Reviewer UI reads boxes as-is from ``*_raw.json`` / ``*_final.json``.
-    try:
-        # Raster once per chunk so --all mode does not re-render per line.
-        page_images = load_page_images(chunk_path)
-    except Exception as exc:
-        return f'Could not rasterize pages for snap-to-ink: {exc}'
-
-    for line in lines:
-        page_number = line.get('page_number')
-        box_2d = line.get('box_2d')
-        if not isinstance(page_number, int) or page_number < 1:
-            continue
-        if page_number > len(page_images):
-            continue
-        snapped = snap_box_2d_to_ink(page_images[page_number - 1], box_2d)
-        if snapped is None:
-            # Keep original model coordinates when snap confidence is weak.
-            continue
-        # In early-dev mode, ``box_2d`` is authoritative and stores snapped output.
-        line['box_2d'] = snapped
-    return None
 
 
 def is_notes_min_length_validation_error(exc: jsonschema.ValidationError) -> bool:
@@ -615,7 +597,8 @@ def transcribe_single_chunk(
     prompt_md: Path,
     transcribe_config: dict,
     config_path: Path,
-    schema: dict,
+    pass1_schema: dict,
+    disk_raw_schema: dict,
     chunk_filename: str,
     chunk_pdf_dir: Path,
 ) -> int:
@@ -655,7 +638,7 @@ def transcribe_single_chunk(
             ),
             temperature=transcribe_config['temperature'],
             reasoning_effort=transcribe_config['reasoning_effort'],
-            response_format=build_response_format(schema),
+            response_format=build_response_format(pass1_schema),
             timeout=transcribe_config['timeout_seconds'],
         )
         inference_time_seconds = time.perf_counter() - inference_start
@@ -697,10 +680,10 @@ def transcribe_single_chunk(
         )
         return 1
 
-    llm_payload = build_llm_payload_for_validation(raw)
+    llm_payload = build_llm_payload_for_pass1_validation(raw)
 
     try:
-        jsonschema.validate(instance=llm_payload, schema=schema)
+        jsonschema.validate(instance=llm_payload, schema=pass1_schema)
     except jsonschema.ValidationError as exc:
         if is_notes_min_length_validation_error(exc):
             print(
@@ -719,14 +702,19 @@ def transcribe_single_chunk(
         )
         return 1
 
-    # Run snap-to-ink after schema validation so we only post-process well-formed data.
-    # This step corrects the VLM's natural "coordinate drift" by adjusting the raw
-    # `box_2d` coordinates to perfectly wrap the physical ink printed on the page.
-    snap_err = snap_line_boxes_to_ink(chunk_path, llm_payload['lines'])
-    if snap_err is not None:
-        print(f'Warning: {snap_err}', file=sys.stderr)
+    from prompt_based.paddle_line_boxes import assign_paddle_line_boxes
 
-    payload = build_full_transcription_payload(llm_payload, transcribe_config)
+    paddle_warn = assign_paddle_line_boxes(chunk_path, llm_payload['lines'])
+    if paddle_warn is not None:
+        print(f'Warning: {paddle_warn}', file=sys.stderr)
+
+    payload = build_disk_transcription_payload(llm_payload, transcribe_config)
+
+    try:
+        jsonschema.validate(instance=payload, schema=disk_raw_schema)
+    except jsonschema.ValidationError as exc:
+        print(f'Schema validation failed (on-disk raw): {exc}', file=sys.stderr)
+        return 1
 
     transcriptions_dir = working_dir / 'transcriptions'
     transcriptions_dir.mkdir(parents=True, exist_ok=True)
@@ -771,7 +759,8 @@ def main() -> int:
     args = parse_args()
     working_dir = args.working_dir.resolve()
     chunk_pdf_dir = resolve_chunk_pdf_dir(working_dir, args.chunk_dir)
-    schema = load_schema()
+    pass1_schema = load_pass1_schema()
+    disk_raw_schema = load_disk_raw_schema()
 
     try:
         config_path = resolve_transcribe_config_path(working_dir)
@@ -816,7 +805,8 @@ def main() -> int:
                 prompt_md,
                 transcribe_config,
                 config_path,
-                schema,
+                pass1_schema,
+                disk_raw_schema,
                 chunk_filename,
                 chunk_pdf_dir,
             )
@@ -833,7 +823,8 @@ def main() -> int:
         prompt_md,
         transcribe_config,
         config_path,
-        schema,
+        pass1_schema,
+        disk_raw_schema,
         chunk_filename,
         chunk_pdf_dir,
     )

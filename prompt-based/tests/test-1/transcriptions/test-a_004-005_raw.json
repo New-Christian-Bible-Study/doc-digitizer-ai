@@ -3,54 +3,55 @@
     {
       "page_number": 1,
       "text": "== Page 4",
-      "box_2d": [
-        55,
-        80,
-        71,
-        200
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 55,
+        "xmin": 80,
+        "ymax": 71,
+        "xmax": 200
+      }
     },
     {
       "page_number": 1,
       "text": "This is part A, page 4 content for review-PDF generation testing.",
-      "box_2d": [
-        97,
-        80,
-        106,
-        615
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 97,
+        "xmin": 80,
+        "ymax": 106,
+        "xmax": 615
+      }
     },
     {
       "page_number": 2,
       "text": "== Page 5",
-      "box_2d": [
-        56,
-        80,
-        71,
-        200
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 56,
+        "xmin": 80,
+        "ymax": 71,
+        "xmax": 200
+      }
     },
     {
       "page_number": 2,
       "text": "This is part A, page 5 content for review-PDF generation testing.",
-      "box_2d": [
-        97,
-        80,
-        106,
-        615
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 97,
+        "xmin": 80,
+        "ymax": 106,
+        "xmax": 615
+      }
     }
   ],
   "confidence_score": 1.0,
   "model": "gemini/gemini-3.1-pro-preview",
   "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium",
-  "ai_confidence_label": "high"
+  "ai_confidence_label": "high",
+  "schema_version": 2
 }

@@ -54,9 +54,10 @@ def test_live_integration_test_1_transcribes_and_logs():
     raw_payload = json.loads(TEST_1_OUTPUT_PATH.read_text(encoding='utf-8'))
     assert isinstance(raw_payload.get('lines'), list)
     assert len(raw_payload['lines']) >= 1
-    assert 'box_2d' in raw_payload['lines'][0]
-    assert raw_payload['lines'][0]['box_2d'] is not None
-    assert len(raw_payload['lines'][0]['box_2d']) == 4
+    assert raw_payload.get('schema_version') == 2
+    lb = raw_payload['lines'][0].get('line_box')
+    assert isinstance(lb, dict)
+    assert {'ymin', 'xmin', 'ymax', 'xmax'} <= set(lb.keys())
     ai_summary_text = TEST_1_AI_SUMMARY_PATH.read_text(encoding='utf-8')
     assert_common_ai_summary_fields(ai_summary_text, TEST_1_CHUNK_FILENAME)
 

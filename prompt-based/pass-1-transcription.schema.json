@@ -1,72 +1,47 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "IDP Final Line Transcription Response",
-  "description": "Human-reviewed transcription output (schema_version 2)",
+  "title": "IDP Pass 1 Line Transcription (VLM only)",
+  "description": "Structured output from the vision-language model before PaddleOCR line boxes are applied. anchor_box_2d is a coarse hint for matching only.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "lines", "confidence_score", "confidence_label", "review_complete"],
+  "required": ["lines", "confidence_score", "confidence_label"],
   "properties": {
-    "schema_version": {
-      "type": "integer",
-      "const": 2
-    },
     "lines": {
       "type": "array",
+      "description": "One object per visible text line in reading order",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["page_number", "text", "line_box"],
+        "required": ["page_number", "text", "anchor_box_2d", "ai_confidence_label", "ai_notes"],
         "properties": {
           "page_number": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "description": "1-based page index within this chunk"
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "description": "Transcription for this line"
           },
-          "line_box": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["ymin", "xmin", "ymax", "xmax"],
-            "properties": {
-              "ymin": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1000
-              },
-              "xmin": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1000
-              },
-              "ymax": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1000
-              },
-              "xmax": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1000
-              }
-            }
+          "anchor_box_2d": {
+            "type": "array",
+            "description": "Coarse [ymin, xmin, ymax, xmax] normalized 0-1000 for layout matching; replaced on disk by Paddle line_box",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "minItems": 4,
+            "maxItems": 4
           },
           "ai_confidence_label": {
             "type": "string",
-            "enum": ["low", "medium", "high"]
+            "enum": ["low", "medium", "high"],
+            "description": "AI per-line confidence level for triage"
           },
           "ai_notes": {
-            "type": "string"
-          },
-          "reviewer_confidence_label": {
             "type": "string",
-            "enum": ["low", "medium", "high"]
-          },
-          "reviewer_notes": {
-            "type": "string"
-          },
-          "reviewer_changed": {
-            "type": "boolean"
+            "description": "AI per-line rationale for uncertainty; required when AI confidence is low"
           }
         }
       }
@@ -74,20 +49,13 @@
     "confidence_score": {
       "type": "number",
       "minimum": 0,
-      "maximum": 1
+      "maximum": 1,
+      "description": "Numeric confidence in the transcription (0.0 to 1.0)"
     },
     "confidence_label": {
       "type": "string",
-      "enum": ["low", "medium", "high"]
-    },
-    "review_complete": {
-      "type": "boolean"
-    },
-    "model": {
-      "type": "string"
-    },
-    "configuration": {
-      "type": "string"
+      "enum": ["low", "medium", "high"],
+      "description": "Human-readable confidence level"
     }
   },
   "allOf": [

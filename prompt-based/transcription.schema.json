@@ -1,47 +1,62 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "IDP Line Transcription Response",
-  "description": "LLM response: per-line text with spatial boxes and confidence metadata",
+  "description": "On-disk transcription (schema_version 2, Paddle line_box)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["lines", "confidence_score", "confidence_label"],
+  "required": ["schema_version", "lines", "confidence_score", "confidence_label"],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
     "lines": {
       "type": "array",
-      "description": "One object per visible text line in reading order",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["page_number", "text", "box_2d"],
+        "required": ["page_number", "text", "line_box"],
         "properties": {
           "page_number": {
             "type": "integer",
-            "minimum": 1,
-            "description": "1-based page index within this chunk"
+            "minimum": 1
           },
           "text": {
-            "type": "string",
-            "description": "Transcription for this line"
+            "type": "string"
           },
-          "box_2d": {
-            "type": "array",
-            "description": "[ymin, xmin, ymax, xmax] normalized 0-1000",
-            "items": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 1000
-            },
-            "minItems": 4,
-            "maxItems": 4
+          "line_box": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ymin", "xmin", "ymax", "xmax"],
+            "properties": {
+              "ymin": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "xmin": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "ymax": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "xmax": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            }
           },
           "ai_confidence_label": {
             "type": "string",
-            "enum": ["low", "medium", "high"],
-            "description": "AI per-line confidence level for triage"
+            "enum": ["low", "medium", "high"]
           },
           "ai_notes": {
-            "type": "string",
-            "description": "AI per-line rationale for uncertainty; required when AI confidence is low"
+            "type": "string"
           }
         }
       }
@@ -49,21 +64,17 @@
     "confidence_score": {
       "type": "number",
       "minimum": 0,
-      "maximum": 1,
-      "description": "Numeric confidence in the transcription (0.0 to 1.0)"
+      "maximum": 1
     },
     "confidence_label": {
       "type": "string",
-      "enum": ["low", "medium", "high"],
-      "description": "Human-readable confidence level"
+      "enum": ["low", "medium", "high"]
     },
     "model": {
-      "type": "string",
-      "description": "LiteLLM model id used for Pass 1 (stored in saved *_raw.json by transcribe-chunk.py)"
+      "type": "string"
     },
     "configuration": {
-      "type": "string",
-      "description": "Summary of transcription settings (stored in saved *_raw.json by transcribe-chunk.py)"
+      "type": "string"
     }
   },
   "allOf": [

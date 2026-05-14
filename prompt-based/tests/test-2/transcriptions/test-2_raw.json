@@ -3,186 +3,187 @@
     {
       "page_number": 1,
       "text": "This content serves as a test of",
-      "box_2d": [
-        89,
-        362,
-        91,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 89,
+        "xmin": 362,
+        "ymax": 91,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "preserving line breaks in",
-      "box_2d": [
-        106,
-        362,
-        109,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 106,
+        "xmin": 362,
+        "ymax": 109,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "paragraphs found in the original",
-      "box_2d": [
-        106,
-        362,
-        114,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 106,
+        "xmin": 362,
+        "ymax": 114,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "text to be transcribed. Doing so",
-      "box_2d": [
-        122,
-        362,
-        130,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 122,
+        "xmin": 362,
+        "ymax": 130,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "can aid in verifying the",
-      "box_2d": [
-        155,
-        362,
-        160,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 155,
+        "xmin": 362,
+        "ymax": 160,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "transcription by person by having",
-      "box_2d": [
-        155,
-        362,
-        163,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 155,
+        "xmin": 362,
+        "ymax": 163,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "the original in one window on the",
-      "box_2d": [
-        188,
-        362,
-        192,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 188,
+        "xmin": 362,
+        "ymax": 192,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "computer monitor next to another",
-      "box_2d": [
-        188,
-        362,
-        195,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 188,
+        "xmin": 362,
+        "ymax": 195,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "window with the transcription so",
-      "box_2d": [
-        204,
-        362,
-        212,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 204,
+        "xmin": 362,
+        "ymax": 212,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "that each line in both windows",
-      "box_2d": [
-        221,
-        362,
-        228,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 221,
+        "xmin": 362,
+        "ymax": 228,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "can be directly compared.",
-      "box_2d": [
-        237,
-        362,
-        245,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 237,
+        "xmin": 362,
+        "ymax": 245,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "In addition, this content serves to",
-      "box_2d": [
-        270,
-        362,
-        277,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 270,
+        "xmin": 362,
+        "ymax": 277,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "test that hyphenation is removed",
-      "box_2d": [
-        275,
-        362,
-        277,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 275,
+        "xmin": 362,
+        "ymax": 277,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "as needed so that it no preservation",
-      "box_2d": [
-        292,
-        362,
-        294,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 292,
+        "xmin": 362,
+        "ymax": 294,
+        "xmax": 626
+      }
     },
     {
       "page_number": 1,
       "text": "of the hyphen is done.",
-      "box_2d": [
-        319,
-        362,
-        327,
-        626
-      ],
       "ai_confidence_label": "high",
-      "ai_notes": ""
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 319,
+        "xmin": 362,
+        "ymax": 327,
+        "xmax": 626
+      }
     }
   ],
   "confidence_score": 0.99,
   "model": "gemini/gemini-3.1-pro-preview",
   "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium",
-  "ai_confidence_label": "high"
+  "ai_confidence_label": "high",
+  "schema_version": 2
 }

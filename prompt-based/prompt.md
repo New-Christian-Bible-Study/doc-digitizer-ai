@@ -9,7 +9,7 @@
 Return a single JSON **object** with a key `"lines"` whose value is an array. Every line of text on every page must be its own element in that array. Each element is an object containing:
 1. `"page_number"`: The page within **this chunk** where the text appears. Use **1-based** indexing: the first page of the chunk is `1`, the second is `2`, and so on (this matches `images[page_number - 1]` when the chunk is rasterized page-by-page).
 2. `"text"`: The transcription of the line following the rules below.
-3. `"box_2d"`: `[ymin, xmin, ymax, xmax]` coordinates for the line bounding region, **normalized 0–1000** (integers) relative to that page’s width and height.
+3. `"anchor_box_2d"`: `[ymin, xmin, ymax, xmax]` **coarse** layout hint, **normalized 0–1000** (integers) relative to that page’s width and height. This is only for ordering and matching; final line crops use PaddleOCR geometry after transcription.
 4. `"ai_confidence_label"`: One of `low`, `medium`, or `high` for this specific line.
 5. `"ai_notes"`: Per-line rationale for uncertainty. Required and non-empty when `"ai_confidence_label"` is `low`; otherwise use an empty string unless there is useful context.
 

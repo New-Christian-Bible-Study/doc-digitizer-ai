@@ -65,8 +65,12 @@ def _get_ocr():
     try:
         from paddleocr import PaddleOCR
     except ImportError as exc:
+        import sys
+
         raise RuntimeError(
-            'paddleocr is not installed. Install dependencies from requirements-paddleocr.txt.'
+            'Could not import paddleocr (ImportError: '
+            f'{exc}). Install with the same Python that runs this script: '
+            f'{sys.executable} -m pip install -r requirements-paddleocr.txt'
         ) from exc
     _OCR_SINGLETON = PaddleOCR(
         use_angle_cls=False,
@@ -75,6 +79,38 @@ def _get_ocr():
         use_gpu=False,
     )
     return _OCR_SINGLETON
+
+
+def _looks_like_point(item: object) -> bool:
+    if not isinstance(item, (list, tuple)) or len(item) < 2:
+        return False
+    try:
+        float(item[0])
+        float(item[1])
+    except (TypeError, ValueError):
+        return False
+    return not isinstance(item[0], (list, tuple))
+
+
+def _looks_like_polygon(item: object) -> bool:
+    if not isinstance(item, (list, tuple)) or len(item) < 3:
+        return False
+    return _looks_like_point(item[0])
+
+
+def _detection_row_to_polygon(row: object) -> object | None:
+    """Extract a detection polygon from one ``ocr()`` row.
+
+    Paddle 2.7 often returns ``[polygon, (text, score)]``; newer builds with
+    ``rec=False`` may return the polygon list directly.
+    """
+    if not isinstance(row, (list, tuple)) or not row:
+        return None
+    if _looks_like_polygon(row):
+        return row
+    if len(row) >= 1 and _looks_like_polygon(row[0]):
+        return row[0]
+    return None
 
 
 def polygon_to_pixel_aabb(poly: object) -> tuple[int, int, int, int] | None:
@@ -204,9 +240,7 @@ def detect_page_aabbs_px(page_image: Image.Image) -> list[tuple[int, int, int, i
     if not result or not result[0]:
         return boxes
     for row in result[0]:
-        if not isinstance(row, (list, tuple)) or len(row) < 2:
-            continue
-        polygon = row[0]
+        polygon = _detection_row_to_polygon(row)
         aabb = polygon_to_pixel_aabb(polygon)
         if aabb is not None:
             boxes.append(aabb)
@@ -289,15 +323,33 @@ def _pick_best_unused_detection(
 def assign_line_boxes_for_page(
     page_image: Image.Image,
     page_lines: list[tuple[int, dict]],
+    *,
+    reading_order_when_counts_match: bool = False,
 ) -> None:
     """For one page, set ``line_box`` on each line dict and remove ``anchor_box_2d``.
 
     ``page_lines`` is ``(ignored_index, line_dict)`` pairs in **transcript order**; that
     order is preserved so the greedy matcher does not reorder VLM lines (only picks
     which detection to attach to each line).
+
+    When ``reading_order_when_counts_match`` is true and transcript line count equals
+    Paddle detection count on this page, pair lines to detections in reading order
+    (transcript order to detections sorted by ``(upper, left)``).
     """
     page_w, page_h = page_image.size
     detections_px = detect_page_aabbs_px(page_image)
+    if (
+        reading_order_when_counts_match
+        and detections_px
+        and len(page_lines) == len(detections_px)
+    ):
+        for (_idx, line), det in zip(page_lines, detections_px):
+            line['line_box'] = pixel_aabb_to_line_box(
+                det[0], det[1], det[2], det[3], page_w, page_h,
+            )
+            line.pop('anchor_box_2d', None)
+        return
+
     used_detection_indices: set[int] = set()
     for _idx, line in page_lines:
         anchor = line.get('anchor_box_2d')
@@ -329,7 +381,12 @@ def assign_line_boxes_for_page(
         line.pop('anchor_box_2d', None)
 
 
-def assign_paddle_line_boxes(chunk_path: Path, lines: list[dict]) -> str | None:
+def assign_paddle_line_boxes(
+    chunk_path: Path,
+    lines: list[dict],
+    *,
+    reading_order_when_counts_match: bool = False,
+) -> str | None:
     """Fill ``line_box`` from Paddle (or snap/anchor fallback). Returns warning or ``None``."""
     warn: str | None = None
     try:
@@ -383,7 +440,11 @@ def assign_paddle_line_boxes(chunk_path: Path, lines: list[dict]) -> str | None:
     for pn in sorted(by_page.keys()):
         if pn > len(page_images):
             continue
-        assign_line_boxes_for_page(page_images[pn - 1], by_page[pn])
+        assign_line_boxes_for_page(
+            page_images[pn - 1],
+            by_page[pn],
+            reading_order_when_counts_match=reading_order_when_counts_match,
+        )
     # Lines skipped above (bad ``page_number``) never entered ``by_page``; finish them here.
     for line in lines:
         if not isinstance(line, dict):
@@ -440,4 +501,8 @@ def reassign_line_boxes_from_pdf(chunk_path: Path, lines: list[dict]) -> str | N
                 line['anchor_box_2d'] = [0, 0, 1000, 1000]
         else:
             line['anchor_box_2d'] = [0, 0, 1000, 1000]
-    return assign_paddle_line_boxes(chunk_path, lines)
+    return assign_paddle_line_boxes(
+        chunk_path,
+        lines,
+        reading_order_when_counts_match=True,
+    )

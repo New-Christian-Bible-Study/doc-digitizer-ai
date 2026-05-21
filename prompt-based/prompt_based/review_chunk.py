@@ -545,17 +545,6 @@ class ReviewMainWindow(QMainWindow):
         if bottom <= top:
             bottom = min(page_h, top + 1)
 
-        # Expand the visual hint box (especially vertically) to absorb model drift.
-        box_h = bottom - top
-        box_w = right - left
-        pad_y = max(6, min(28, box_h // 2))
-        pad_x = max(3, min(16, box_w // 8))
-
-        left = max(0, left - pad_x)
-        right = min(page_w, right + pad_x)
-        top = max(0, top - pad_y)
-        bottom = min(page_h, bottom + pad_y)
-
         self._active_line_box_item.setRect(left, top, max(1, right - left), max(1, bottom - top))
         self._active_line_box_item.setVisible(True)
 

@@ -704,6 +704,8 @@ def transcribe_single_chunk(
 
     from prompt_based.paddle_line_boxes import assign_paddle_line_boxes
 
+    # Pass 1 leaves anchor_box_2d on each line; this step writes final line_box geometry
+    # (Paddle when IoU confident, else snap-to-ink) and strips anchors before raw JSON save.
     paddle_warn = assign_paddle_line_boxes(chunk_path, llm_payload['lines'])
     if paddle_warn is not None:
         print(f'Warning: {paddle_warn}', file=sys.stderr)

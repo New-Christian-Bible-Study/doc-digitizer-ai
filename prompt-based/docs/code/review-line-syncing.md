@@ -88,9 +88,14 @@ LiteLLM `response_format` uses **`pass-1-transcription.schema.json`** (lines inc
 
 ## Box geometry (PaddleOCR + matcher)
 
+**Coordinate grid:** All boxes use integers on a **0–1000** grid per page axis
+(``BOX_2D_NORMALIZED_MAX`` in ``chunk_lines_model.py``). Order is
+``[ymin, xmin, ymax, xmax]``. See that module's docstring for field names
+(``anchor_box_2d`` vs ``line_box`` vs legacy ``box_2d``) and pixel mapping.
+
 **Detection:** `paddle_line_boxes.detect_page_aabbs_px()` runs PaddleOCR with `det=True`, `rec=False` on the same rasters as review.
 
-**Matching:** Per page, transcript lines stay in JSON order. Each line’s `anchor_box_2d` maps to the best **unused** detection by IoU in pixel space (with a nearest-center fallback when IoU is weak). This avoids pairing purely by sorted box order when the VLM omits regions Paddle still finds.
+**Matching:** Per page, transcript lines stay in JSON order. Each line’s `anchor_box_2d` maps to the best **unused** Paddle detection only when IoU in pixel space is at least `IOU_USE_PADDLE_BOX` (currently 0.12). Detections in the bottom margin that look like catchwords or signatures are dropped before matching. When IoU is weak or no detection remains, `snap_box_2d_to_ink()` on the anchor becomes `line_box`.
 
 **Fallback:** If Paddle is not installed, if a page has no detections, or if no unused detection is chosen for a line, the code runs `snap_box_2d_to_ink()` on the normalized anchor. A non-`None` snap result becomes `line_box`; if snap returns `None`, `line_box` is built from the anchor’s four ints (see Failure Modes).
 
@@ -131,7 +136,7 @@ Highlight padding in `show_active_line_box()` is **UI-only** and separate from c
 ## Tuning and Verification
 
 - **Snap and crop:** `SNAP_*`, `CROP_PAD_*`, `REVIEW_PDF_RASTER_DPI` in `chunk_lines_model.py`
-- **Paddle match:** `IOU_MIN_CONFIDENT_MATCH` in `paddle_line_boxes.py` (tiny IoU still falls back to nearest-center pairing)
+- **Paddle match:** `IOU_USE_PADDLE_BOX`, `DET_FILTER_*` in `paddle_line_boxes.py`
 - **Review highlight:** padding in `show_active_line_box()` in `review-chunk.py`
 - **Review vertical padding:** margin added in `_update_scene_vertical_padding()` in `review-chunk.py` (viewport-sized slack for bottom-line alignment)
 - **Tests / visuals:** `prompt-based/tests/test_chunk_lines_model.py`, `prompt-based/tests/chunk-lines-boxes-export.py`

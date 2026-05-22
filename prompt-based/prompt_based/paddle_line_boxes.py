@@ -3,10 +3,23 @@ PaddleOCR detection for per-line axis-aligned boxes (schema_version 2 ``line_box
 
 We use **detection only** (text regions as polygons), then collapse each polygon to an
 axis-aligned bounding box (AABB) in **pixels**, match those boxes to VLM transcript lines
-using the coarse ``anchor_box_2d``, and write normalized ``line_box`` dicts.
+using the coarse ``anchor_box_2d`` when IoU is confident, and otherwise snap the anchor
+to visible ink. Normalized ``line_box`` dicts are written for review.
 
 This module is imported only from transcribe and the legacy upgrade CLI so the
 reviewer executable does not depend on Paddle.
+
+Geometry pipeline (per page, per transcript line)
+-------------------------------------------------
+1. VLM emits ``anchor_box_2d`` (normalized 0..1000) during Pass 1.
+2. Paddle ``detect_page_aabbs_px`` returns pixel AABBs sorted top-to-bottom.
+3. ``_filter_detections_for_matching`` drops catchword-sized bottom-margin boxes.
+4. For each line in JSON order: if IoU(anchor, detection) >= ``IOU_USE_PADDLE_BOX``,
+   write detection as ``line_box``; else ``snap_box_2d_to_ink(anchor)`` → ``line_box``.
+5. ``anchor_box_2d`` is removed; review reads only ``line_box``.
+
+All normalized boxes use ``BOX_2D_NORMALIZED_MAX`` (1000) from ``chunk_lines_model``.
+See that module's docstring for ``[ymin, xmin, ymax, xmax]`` convention.
 
 **PaddleOCR documentation (APIs change across major versions — verify against your pin):**
 
@@ -46,9 +59,17 @@ if TYPE_CHECKING:
 
 # --- Matching heuristics (tune here; document changes in review-line-syncing.md if UX shifts) ---
 
-# If best IoU is below this, treat geometry overlap as unreliable and fall back to
-# nearest-center distance between anchor and detections (see ``_pick_best_unused_detection``).
-IOU_MIN_CONFIDENT_MATCH = 0.01
+# Minimum IoU between VLM anchor and a Paddle detection before we adopt the Paddle AABB.
+# Below this threshold we keep the anchor and run ``snap_box_2d_to_ink`` instead of
+# grabbing a weak nearest-center match (e.g. a catchword box at the page foot).
+IOU_USE_PADDLE_BOX = 0.12
+
+# Drop tiny Paddle boxes in the bottom margin (catchwords, signatures) before matching.
+DET_FILTER_MIN_WIDTH_PX = 10
+DET_FILTER_MIN_HEIGHT_PX = 6
+DET_FILTER_BOTTOM_FRAC = 0.87
+DET_FILTER_BOTTOM_MAX_AREA_PX = 4800
+DET_FILTER_BOTTOM_MAX_WIDTH_FRAC = 0.12
 
 _OCR_SINGLETON = None
 
@@ -275,22 +296,43 @@ def _anchor_norm_to_pixel_rect(
     return left, upper, right, lower
 
 
+def _filter_detections_for_matching(
+    page_w: int,
+    page_h: int,
+    detections_px: list[tuple[int, int, int, int]],
+) -> list[tuple[int, int, int, int]]:
+    """Drop detections that should not participate in line matching.
+
+    Historical pages often have catchwords and signatures at the foot that the VLM
+    omits; Paddle still finds them and they poison greedy 1:1 pairing.
+    """
+    filtered: list[tuple[int, int, int, int]] = []
+    bottom_y = page_h * DET_FILTER_BOTTOM_FRAC
+    for left, upper, right, lower in detections_px:
+        width = right - left
+        height = lower - upper
+        if width < DET_FILTER_MIN_WIDTH_PX or height < DET_FILTER_MIN_HEIGHT_PX:
+            continue
+        center_y = (upper + lower) / 2.0
+        if center_y >= bottom_y:
+            area = width * height
+            if area <= DET_FILTER_BOTTOM_MAX_AREA_PX:
+                continue
+            if width <= page_w * DET_FILTER_BOTTOM_MAX_WIDTH_FRAC and height <= 35:
+                continue
+        filtered.append((left, upper, right, lower))
+    return filtered
+
+
 def _pick_best_unused_detection(
     anchor_px: tuple[int, int, int, int],
     detections_px: list[tuple[int, int, int, int]],
     used_indices: set[int],
 ) -> int | None:
-    """Pick the best unused Paddle detection index for one transcript line.
+    """Pick the best unused Paddle detection when IoU with the anchor is confident.
 
-    Primary score: IoU between anchor (VLM coarse rect in pixels) and detection AABB.
-    Tie-break: prefer larger IoU, then smaller center-distance (``key = (iou, -dist)``).
-
-    If the best IoU is still tiny (``< IOU_MIN_CONFIDENT_MATCH``), overlap is ambiguous
-    (e.g. anchor drift); fall back to **nearest center** among unused boxes so we still
-    pick something stable when the VLM y-position is roughly right but width/height differ.
-
-    **Future change:** replace greedy per-line with Hungarian assignment if line/det
-    counts diverge often; pass cost matrix ``1 - iou`` or center distance.
+    Returns ``None`` when no unused detection overlaps the anchor enough to trust
+    Paddle over the VLM anchor + snap-to-ink path.
     """
     best_index: int | None = None
     best_key: tuple[float, float] | None = None
@@ -298,67 +340,61 @@ def _pick_best_unused_detection(
         if j in used_indices:
             continue
         iou = _iou_pixel_boxes(anchor_px, det_box)
+        if iou < IOU_USE_PADDLE_BOX:
+            continue
         dist = _center_distance_px(anchor_px, det_box)
         key = (iou, -dist)
         if best_key is None or key > best_key:
             best_key = key
             best_index = j
-    if best_index is None:
-        return None
-    assert best_key is not None
-    if best_key[0] >= IOU_MIN_CONFIDENT_MATCH:
-        return best_index
-    nearest_index: int | None = None
-    nearest_dist = 1e18
-    for j, det_box in enumerate(detections_px):
-        if j in used_indices:
-            continue
-        d = _center_distance_px(anchor_px, det_box)
-        if d < nearest_dist:
-            nearest_dist = d
-            nearest_index = j
-    return nearest_index
+    return best_index
+
+
+def _parse_anchor_norm(anchor: object) -> list[int]:
+    if not isinstance(anchor, list) or len(anchor) != 4:
+        anchor = [0, 0, int(BOX_2D_NORMALIZED_MAX), int(BOX_2D_NORMALIZED_MAX)]
+    try:
+        return [int(anchor[0]), int(anchor[1]), int(anchor[2]), int(anchor[3])]
+    except (TypeError, ValueError):
+        return [0, 0, 1000, 1000]
+
+
+def _set_line_box_from_anchor(
+    page_image: Image.Image,
+    line: dict,
+    anchor_norm: list[int],
+) -> None:
+    snapped = snap_box_2d_to_ink(page_image, anchor_norm)
+    line_aabb_norm = snapped if snapped is not None else anchor_norm
+    line['line_box'] = line_box_dict_from_normalized_aabb(
+        [
+            int(line_aabb_norm[0]),
+            int(line_aabb_norm[1]),
+            int(line_aabb_norm[2]),
+            int(line_aabb_norm[3]),
+        ],
+    )
 
 
 def assign_line_boxes_for_page(
     page_image: Image.Image,
     page_lines: list[tuple[int, dict]],
-    *,
-    reading_order_when_counts_match: bool = False,
 ) -> None:
     """For one page, set ``line_box`` on each line dict and remove ``anchor_box_2d``.
 
-    ``page_lines`` is ``(ignored_index, line_dict)`` pairs in **transcript order**; that
-    order is preserved so the greedy matcher does not reorder VLM lines (only picks
-    which detection to attach to each line).
-
-    When ``reading_order_when_counts_match`` is true and transcript line count equals
-    Paddle detection count on this page, pair lines to detections in reading order
-    (transcript order to detections sorted by ``(upper, left)``).
+    ``page_lines`` is ``(ignored_index, line_dict)`` pairs in **transcript order**.
+    Greedy matching: each line claims at most one unused Paddle detection; lines the
+    VLM added but Paddle skipped (e.g. beside a drop cap) fall back to anchor/snap.
     """
     page_w, page_h = page_image.size
-    detections_px = detect_page_aabbs_px(page_image)
-    if (
-        reading_order_when_counts_match
-        and detections_px
-        and len(page_lines) == len(detections_px)
-    ):
-        for (_idx, line), det in zip(page_lines, detections_px):
-            line['line_box'] = pixel_aabb_to_line_box(
-                det[0], det[1], det[2], det[3], page_w, page_h,
-            )
-            line.pop('anchor_box_2d', None)
-        return
-
+    detections_px = _filter_detections_for_matching(
+        page_w,
+        page_h,
+        detect_page_aabbs_px(page_image),
+    )
     used_detection_indices: set[int] = set()
     for _idx, line in page_lines:
-        anchor = line.get('anchor_box_2d')
-        if not isinstance(anchor, list) or len(anchor) != 4:
-            anchor = [0, 0, int(BOX_2D_NORMALIZED_MAX), int(BOX_2D_NORMALIZED_MAX)]
-        try:
-            anchor_norm = [int(anchor[0]), int(anchor[1]), int(anchor[2]), int(anchor[3])]
-        except (TypeError, ValueError):
-            anchor_norm = [0, 0, 1000, 1000]
+        anchor_norm = _parse_anchor_norm(line.get('anchor_box_2d'))
         anchor_px = _anchor_norm_to_pixel_rect(anchor_norm, page_w, page_h)
         chosen: int | None = None
         if detections_px:
@@ -368,24 +404,13 @@ def assign_line_boxes_for_page(
             det = detections_px[chosen]
             line['line_box'] = pixel_aabb_to_line_box(det[0], det[1], det[2], det[3], page_w, page_h)
         else:
-            snapped = snap_box_2d_to_ink(page_image, anchor_norm)
-            line_aabb_norm = snapped if snapped is not None else anchor_norm
-            line['line_box'] = line_box_dict_from_normalized_aabb(
-                [
-                    int(line_aabb_norm[0]),
-                    int(line_aabb_norm[1]),
-                    int(line_aabb_norm[2]),
-                    int(line_aabb_norm[3]),
-                ],
-            )
+            _set_line_box_from_anchor(page_image, line, anchor_norm)
         line.pop('anchor_box_2d', None)
 
 
 def assign_paddle_line_boxes(
     chunk_path: Path,
     lines: list[dict],
-    *,
-    reading_order_when_counts_match: bool = False,
 ) -> str | None:
     """Fill ``line_box`` from Paddle (or snap/anchor fallback). Returns warning or ``None``."""
     warn: str | None = None
@@ -400,9 +425,6 @@ def assign_paddle_line_boxes(
         for line in lines:
             if not isinstance(line, dict):
                 continue
-            anchor = line.get('anchor_box_2d')
-            if not isinstance(anchor, list) or len(anchor) != 4:
-                anchor = [0, 0, 1000, 1000]
             page_number = line.get('page_number')
             if not isinstance(page_number, int) or page_number < 1 or page_number > len(page_images):
                 line.pop('anchor_box_2d', None)
@@ -414,16 +436,7 @@ def assign_paddle_line_boxes(
                 )
                 continue
             img = page_images[page_number - 1]
-            snapped = snap_box_2d_to_ink(img, anchor)
-            line_aabb_norm = snapped if snapped is not None else anchor
-            line['line_box'] = line_box_dict_from_normalized_aabb(
-                [
-                    int(line_aabb_norm[0]),
-                    int(line_aabb_norm[1]),
-                    int(line_aabb_norm[2]),
-                    int(line_aabb_norm[3]),
-                ],
-            )
+            _set_line_box_from_anchor(img, line, _parse_anchor_norm(line.get('anchor_box_2d')))
             line.pop('anchor_box_2d', None)
         return warn
 
@@ -440,11 +453,7 @@ def assign_paddle_line_boxes(
     for pn in sorted(by_page.keys()):
         if pn > len(page_images):
             continue
-        assign_line_boxes_for_page(
-            page_images[pn - 1],
-            by_page[pn],
-            reading_order_when_counts_match=reading_order_when_counts_match,
-        )
+        assign_line_boxes_for_page(page_images[pn - 1], by_page[pn])
     # Lines skipped above (bad ``page_number``) never entered ``by_page``; finish them here.
     for line in lines:
         if not isinstance(line, dict):
@@ -461,20 +470,8 @@ def assign_paddle_line_boxes(
                 ),
             )
             continue
-        anchor = line.get('anchor_box_2d')
-        if not isinstance(anchor, list) or len(anchor) != 4:
-            anchor = [0, 0, 1000, 1000]
         img = page_images[page_number - 1]
-        snapped = snap_box_2d_to_ink(img, anchor)
-        line_aabb_norm = snapped if snapped is not None else anchor
-        line['line_box'] = line_box_dict_from_normalized_aabb(
-            [
-                int(line_aabb_norm[0]),
-                int(line_aabb_norm[1]),
-                int(line_aabb_norm[2]),
-                int(line_aabb_norm[3]),
-            ],
-        )
+        _set_line_box_from_anchor(img, line, _parse_anchor_norm(line.get('anchor_box_2d')))
         line.pop('anchor_box_2d', None)
     return warn
 
@@ -482,8 +479,9 @@ def assign_paddle_line_boxes(
 def reassign_line_boxes_from_pdf(chunk_path: Path, lines: list[dict]) -> str | None:
     """Recompute ``line_box`` for existing v2 lines using Paddle (expects no ``anchor_box_2d``).
 
-    Builds ephemeral ``anchor_box_2d`` from current ``line_box`` so the same matcher as
-    transcribe runs without re-querying the VLM.
+    Used by ``convert-transcription-boxes.py --chunk-pdf``. Builds ephemeral
+    ``anchor_box_2d`` from current ``line_box`` so the same hybrid matcher as transcribe
+    runs without re-querying the VLM.
     """
     for line in lines:
         if not isinstance(line, dict):
@@ -501,8 +499,4 @@ def reassign_line_boxes_from_pdf(chunk_path: Path, lines: list[dict]) -> str | N
                 line['anchor_box_2d'] = [0, 0, 1000, 1000]
         else:
             line['anchor_box_2d'] = [0, 0, 1000, 1000]
-    return assign_paddle_line_boxes(
-        chunk_path,
-        lines,
-        reading_order_when_counts_match=True,
-    )
+    return assign_paddle_line_boxes(chunk_path, lines)

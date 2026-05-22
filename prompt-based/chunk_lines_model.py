@@ -2,6 +2,30 @@
 Chunk line transcriptions: paths, JSON payload, page rasters, and box geometry.
 
 No Qt — safe to import from CLI tools or other UIs besides the line reviewer.
+
+Coordinate system (``BOX_2D_NORMALIZED_MAX``)
+-----------------------------------------------
+Line boxes use a **fixed 0..1000 integer grid** on each page axis (width and height
+scaled independently). Order is always **[ymin, xmin, ymax, xmax]** — y indices before x.
+
+Field names through the pipeline:
+
+- ``anchor_box_2d`` — Pass 1 only (in raw JSON until transcribe finishes). Coarse VLM
+  layout hint for Paddle matching; removed once ``line_box`` is written.
+- ``line_box`` — schema v2 on disk: ``{ymin, xmin, ymax, xmax}`` object. What review
+  highlights and ``crop_for_line`` read.
+- ``box_2d`` — legacy v1: same four ints as an array; still accepted for old files.
+
+Pixel mapping (page rasters at ``REVIEW_PDF_RASTER_DPI``)::
+
+    left   = round(xmin / BOX_2D_NORMALIZED_MAX * page_width)
+    top    = round(ymin / BOX_2D_NORMALIZED_MAX * page_height)
+    right  = round(xmax / BOX_2D_NORMALIZED_MAX * page_width)
+    bottom = round(ymax / BOX_2D_NORMALIZED_MAX * page_height)
+
+``right``/``bottom`` are treated as **exclusive** edges when cropping (Pillow convention).
+
+Further reading: ``prompt-based/docs/code/review-line-syncing.md``.
 """
 
 from __future__ import annotations
@@ -18,15 +42,13 @@ from PIL import Image
 # differ slightly — line crops in the UI are best-effort vs page aspect ratio.
 REVIEW_PDF_RASTER_DPI = 200
 
-# Normalized coordinate grid for line geometry (0–1000). ``schema_version`` 2 uses
-# ``line_box`` objects on disk; legacy files use ``box_2d`` arrays with the same numbers.
+# Normalized coordinate grid for all line geometry (0–1000 per page axis).
+# See module docstring for field names (anchor_box_2d vs line_box vs box_2d) and pixel mapping.
 BOX_2D_NORMALIZED_MAX = 1000
 TRANSCRIPTION_SCHEMA_VERSION_V2 = 2
 
-# ``line_aabb_norm`` names the four-int list ``[ymin, xmin, ymax, xmax]`` on the
-# ``0 .. BOX_2D_NORMALIZED_MAX`` grid: values read from ``line_box`` (v2) or legacy
-# ``box_2d``, before scaling to pixel crops in ``clamp_box_2d_to_pixels`` or when
-# building ``line_box`` dicts from normalized bounds.
+# Shorthand name for the four-int list ``[ymin, xmin, ymax, xmax]`` on the grid above.
+# Used when converting between dict ``line_box``, legacy ``box_2d``, and pixel crops.
 
 # Padding around the clamped model box for line crops (preview comfort). Too much
 # bottom padding pulls in the next line when line spacing is tight.
@@ -74,7 +96,12 @@ def is_injected_page_marker(text: object) -> bool:
 
 
 def editable_line_indices(lines: list) -> list[int]:
-    """Indices into ``payload['lines']`` for rows that are not synthetic ``// Page N`` markers."""
+    """Indices into ``payload['lines']`` for rows shown in the reviewer.
+
+    Skips synthetic ``// Page N`` markers the VLM sometimes emits (see ``is_injected_page_marker``).
+    The reviewer uses **ridx** (0..len-1 into this list); map to payload with
+    ``editable_indices[ridx]``.
+    """
     out: list[int] = []
     for i, line in enumerate(lines):
         record = LineRecord.from_object(line)
@@ -123,7 +150,22 @@ class TranscriptionPaths:
 
 @dataclass
 class LineRecord:
-    """Typed wrapper around one payload line dictionary."""
+    """Typed wrapper around one ``payload['lines'][i]`` dictionary.
+
+    Text fields:
+    - ``text`` — transcription shown in the reviewer.
+
+    AI metadata (set at transcribe time, read-only in review UI except via raw reload):
+    - ``ai_confidence_label`` — ``low`` | ``medium`` | ``high`` per line.
+    - ``ai_notes`` — VLM rationale; required when label is ``low``.
+
+    Reviewer metadata (edited in review-chunk, saved to ``*_final.json``):
+    - ``reviewer_confidence_label``, ``reviewer_notes``
+    - ``reviewer_changed`` — whether text differs from raw baseline at save time.
+
+    Geometry (written at transcribe time):
+    - ``line_box`` / legacy ``box_2d``, ``page_number``
+    """
 
     data: dict
 
@@ -556,8 +598,11 @@ def load_page_images(pdf_path: Path) -> list[Image.Image]:
 
 
 def load_payload(raw_path: Path, final_path: Path) -> dict:
-    # Prefer final when it exists so reopening the chunk loads saved review work, not stale raw.
-    # Line sync reads ``lines[].line_box`` (or legacy ``box_2d``) / ``page_number`` as-is.
+    """Load transcription JSON for review.
+
+    Prefers ``*_final.json`` when present so reopening a chunk resumes saved review work.
+    Falls back to ``*_raw.json``. Line geometry is read as-is from ``lines[].line_box``.
+    """
     if final_path.exists():
         return json.loads(final_path.read_text(encoding='utf-8'))
     return json.loads(raw_path.read_text(encoding='utf-8'))
@@ -731,12 +776,13 @@ class ChunkLinesSession:
         return crop_for_line(self.page_images, line)
 
     def commit_editable_text(self, text: str) -> None:
-        """Write ``text`` into ``payload['lines']`` for the current editable index."""
+        """Write ``text`` into ``payload['lines'][editable_indices[editable_ridx]]``."""
         self.clamp_editable_ridx()
         idx = self.editable_indices[self.editable_ridx]
         self.line_records[idx].set_text(text)
 
     def save_to_final(self) -> None:
+        """Write the in-memory ``payload`` to ``paths.final_path`` (creates parent dirs)."""
         if self.paths is None:
             return
         save_payload(self.paths.final_path, self.payload)

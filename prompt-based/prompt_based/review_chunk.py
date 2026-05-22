@@ -1,3 +1,20 @@
+"""
+Desktop line reviewer (PySide6).
+
+Index glossary used throughout this module:
+
+- **payload index** — index into ``payload['lines']`` (full array, may include
+  non-editable ``// Page N`` markers).
+- **ridx / editable_ridx** — index into the visible editor list (0 .. N-1).
+  Map to payload with ``session.editable_indices[ridx]``.
+
+The blue page highlight reads persisted ``line_box`` from JSON (written at transcribe
+time by ``paddle_line_boxes``). This UI does **not** run PaddleOCR or re-snap boxes
+when the user focuses a row.
+
+See ``prompt-based/docs/code/review-line-syncing.md`` for the full geometry pipeline.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -149,6 +166,7 @@ class ReviewMainWindow(QMainWindow):
         self._line_original_texts: list[str] = []
         self._line_conf_labels: list[str] = []
         self._row_indices: list[int] = []
+        # ``_row_indices[ridx]`` is the payload index for that editor row (see module docstring).
         self._review_note_buttons: list[QPushButton] = []
         self._review_panels: list[QWidget] = []
         self._review_conf_combos: list[QComboBox] = []
@@ -361,6 +379,7 @@ class ReviewMainWindow(QMainWindow):
         self._last_align_ridx = None
 
     def populate_lines(self, session: ChunkLinesSession, ctrl: 'ReviewChunkLinesController') -> None:
+        """Build one editor row per editable line (``session.editable_indices``)."""
         self.clear_line_rows()
         for ridx, payload_idx in enumerate(session.editable_indices):
             line = session.lines[payload_idx]
@@ -372,8 +391,8 @@ class ReviewMainWindow(QMainWindow):
             row_layout.setSpacing(2)
             badge = QLabel(conf.upper())
 
-            # Keep high-confidence rows visually quiet. For medium/low rows, put a
-            # clear warning line above the editor with confidence + reason.
+            # Yellow/red banner: AI metadata from transcribe (``ai_confidence_label`` +
+            # ``ai_notes``). Hidden once the reviewer edits the line text.
             if conf != 'high':
                 warn = QLabel(
                     f'AI Confidence: {conf.upper()}'
@@ -507,8 +526,12 @@ class ReviewMainWindow(QMainWindow):
         self._smooth_center_on_y(target_y)
 
     def show_active_line_box(self, line: dict) -> None:
-        # Overlay padding is for human-friendly hints only. Crop padding for PIL lives
-        # in ``chunk_lines_model.clamp_box_2d_to_pixels`` (used by ``crop_for_line``).
+        """Draw the blue highlight from ``line_box`` on the current page pixmap.
+
+        Maps normalized ``[ymin, xmin, ymax, xmax]`` (0..``BOX_2D_NORMALIZED_MAX``) to
+        scene pixels. No extra padding here — tight boxes match Paddle output.
+        Crop padding for PIL lives in ``chunk_lines_model.clamp_box_2d_to_pixels``.
+        """
         if self._page_pixmap is None or self._page_pixmap.isNull():
             self._active_line_box_item.setVisible(False)
             return
@@ -923,9 +946,10 @@ class ReviewChunkLinesController:
         return True
 
     def _show_line(self) -> None:
-        # Line/image sync uses only persisted ``page_number`` and ``line_box`` (or legacy
-        # ``box_2d``); no OCR
-        # or re-snap at focus time.
+        """Refresh left pane + highlight for ``session.editable_ridx`` (ridx).
+
+        Uses only persisted ``page_number`` and ``line_box``; no OCR or re-snap at focus time.
+        """
         self._session.clamp_editable_ridx()
         s = self._session
         n_editable = len(s.editable_indices)
@@ -1034,6 +1058,7 @@ class ReviewChunkLinesController:
         self._show_line()
 
     def _commit_all(self) -> None:
+        """Copy every editor row back into ``payload['lines']`` before save/complete."""
         for ridx in range(len(self._session.editable_indices)):
             self._session.editable_ridx = ridx
             self._session.commit_editable_text(self._view.line_text(ridx))

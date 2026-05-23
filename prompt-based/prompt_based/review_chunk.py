@@ -382,6 +382,21 @@ class ReviewMainWindow(QMainWindow):
         self._line_excluded = []
         self._last_align_ridx = None
 
+    def _assert_row_ridx(self, ridx: int) -> None:
+        """Require ``ridx`` to index a populated editor row.
+
+        Row getters (``line_text``, ``line_excluded``, etc.) and save/commit paths call
+        this so an out-of-range index fails loudly instead of returning a default that
+        could corrupt ``*_final.json`` (e.g. ``line_excluded`` silently becoming false).
+
+        Qt slot handlers (``_on_editor_text_changed``, ``_on_reviewer_note_action_clicked``,
+        …) still guard with early ``return`` on bad ``ridx``: a stale signal after
+        ``clear_line_rows()``/``deleteLater()`` is tolerable as a no-op, whereas inventing
+        save data is not.
+        """
+        n = len(self._line_edits)
+        assert 0 <= ridx < n, f'row index {ridx} out of range for {n} line row(s)'
+
     def populate_lines(self, session: ChunkLinesSession, ctrl: 'ReviewChunkLinesController') -> None:
         """Build one editor row per editable line (``session.editable_indices``)."""
         self.clear_line_rows()
@@ -725,27 +740,23 @@ class ReviewMainWindow(QMainWindow):
         QTimer.singleShot(0, self._refit_and_restore_focus_center)
 
     def line_text(self, ridx: int) -> str:
-        if 0 <= ridx < len(self._line_edits):
-            return self._line_edits[ridx].text()
-        return ''
+        self._assert_row_ridx(ridx)
+        return self._line_edits[ridx].text()
 
     def reviewer_confidence_value(self, ridx: int) -> str | None:
-        if not (0 <= ridx < len(self._review_conf_combos)):
-            return None
+        self._assert_row_ridx(ridx)
         value = self._review_conf_combos[ridx].currentData()
         if value in {None, ''}:
             return None
         return str(value)
 
     def reviewer_note_text(self, ridx: int) -> str:
-        if not (0 <= ridx < len(self._review_note_edits)):
-            return ''
+        self._assert_row_ridx(ridx)
         return self._review_note_edits[ridx].text()
 
     def line_excluded(self, ridx: int) -> bool:
-        if 0 <= ridx < len(self._line_excluded):
-            return self._line_excluded[ridx]
-        return False
+        self._assert_row_ridx(ridx)
+        return self._line_excluded[ridx]
 
     def set_prev_next_enabled(self, prev_enabled: bool, next_enabled: bool) -> None:
         self._btn_prev.setEnabled(prev_enabled)
@@ -814,40 +825,35 @@ class ReviewMainWindow(QMainWindow):
         ridx: int,
         ctrl: 'ReviewChunkLinesController',
     ) -> None:
-        if not (0 <= ridx < len(self._line_excluded)):
-            return
+        self._assert_row_ridx(ridx)
         self._line_excluded[ridx] = not self._line_excluded[ridx]
         self._update_exclude_button(ridx)
         self._apply_excluded_line_style(ridx)
         ctrl._on_text_changed()
 
     def _update_exclude_button(self, ridx: int) -> None:
-        if not (0 <= ridx < len(self._line_exclude_buttons)):
-            return
-        excluded = self._line_excluded[ridx] if ridx < len(self._line_excluded) else False
+        self._assert_row_ridx(ridx)
+        excluded = self._line_excluded[ridx]
         self._line_exclude_buttons[ridx].setText('Include' if excluded else 'Exclude')
 
     def _apply_excluded_line_style(self, ridx: int) -> None:
-        if not (0 <= ridx < len(self._line_rows)):
-            return
-        excluded = self._line_excluded[ridx] if ridx < len(self._line_excluded) else False
+        self._assert_row_ridx(ridx)
+        excluded = self._line_excluded[ridx]
         row = self._line_rows[ridx]
         edit = self._line_edits[ridx]
-        conf = self._line_conf_labels[ridx] if ridx < len(self._line_conf_labels) else 'high'
-        badge = self._line_badges[ridx] if ridx < len(self._line_badges) else None
+        conf = self._line_conf_labels[ridx]
+        badge = self._line_badges[ridx]
         if excluded:
             row.setStyleSheet(
                 'QWidget { border: 1px solid #777; border-radius: 5px; background: #f4f4f4; }',
             )
-            if badge is not None:
-                badge.setStyleSheet('QLabel { color: #999; font-weight: 600; }')
+            badge.setStyleSheet('QLabel { color: #999; font-weight: 600; }')
             edit.setStyleSheet(
                 'QLineEdit { padding-top: 2px; padding-bottom: 2px; color: #888; '
                 'border: 1px solid #bbb; border-radius: 4px; }',
             )
             return
-        if badge is not None:
-            self._apply_row_confidence_style(row, badge, conf)
+        self._apply_row_confidence_style(row, badge, conf)
         current_text = edit.text().rstrip()
         changed = current_text != self._line_original_texts[ridx]
         self._apply_edited_line_style(ridx, changed)

@@ -1,4 +1,5 @@
 {
+  "schema_version": 2,
   "lines": [
     {
       "page_number": 1,
@@ -6,10 +7,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 89,
-        "xmin": 362,
-        "ymax": 91,
-        "xmax": 626
+        "ymin": 68,
+        "xmin": 361,
+        "ymax": 83,
+        "xmax": 640
       }
     },
     {
@@ -18,10 +19,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 106,
-        "xmin": 362,
-        "ymax": 109,
-        "xmax": 626
+        "ymin": 86,
+        "xmin": 361,
+        "ymax": 100,
+        "xmax": 640
       }
     },
     {
@@ -30,10 +31,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 106,
-        "xmin": 362,
-        "ymax": 114,
-        "xmax": 626
+        "ymin": 102,
+        "xmin": 363,
+        "ymax": 117,
+        "xmax": 639
       }
     },
     {
@@ -42,10 +43,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 122,
-        "xmin": 362,
-        "ymax": 130,
-        "xmax": 626
+        "ymin": 118,
+        "xmin": 360,
+        "ymax": 133,
+        "xmax": 639
       }
     },
     {
@@ -54,10 +55,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 155,
-        "xmin": 362,
-        "ymax": 160,
-        "xmax": 626
+        "ymin": 132,
+        "xmin": 358,
+        "ymax": 151,
+        "xmax": 639
       }
     },
     {
@@ -66,10 +67,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 155,
-        "xmin": 362,
-        "ymax": 163,
-        "xmax": 626
+        "ymin": 152,
+        "xmin": 363,
+        "ymax": 165,
+        "xmax": 637
       }
     },
     {
@@ -78,10 +79,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 188,
-        "xmin": 362,
-        "ymax": 192,
-        "xmax": 626
+        "ymin": 167,
+        "xmin": 361,
+        "ymax": 182,
+        "xmax": 637
       }
     },
     {
@@ -90,10 +91,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 188,
-        "xmin": 362,
-        "ymax": 195,
-        "xmax": 626
+        "ymin": 184,
+        "xmin": 363,
+        "ymax": 198,
+        "xmax": 637
       }
     },
     {
@@ -102,10 +103,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 204,
-        "xmin": 362,
-        "ymax": 212,
-        "xmax": 626
+        "ymin": 201,
+        "xmin": 363,
+        "ymax": 215,
+        "xmax": 639
       }
     },
     {
@@ -114,10 +115,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 221,
-        "xmin": 362,
-        "ymax": 228,
-        "xmax": 626
+        "ymin": 217,
+        "xmin": 363,
+        "ymax": 231,
+        "xmax": 639
       }
     },
     {
@@ -126,10 +127,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 237,
-        "xmin": 362,
-        "ymax": 245,
-        "xmax": 626
+        "ymin": 233,
+        "xmin": 363,
+        "ymax": 248,
+        "xmax": 570
       }
     },
     {
@@ -138,10 +139,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 270,
-        "xmin": 362,
-        "ymax": 277,
-        "xmax": 626
+        "ymin": 282,
+        "xmin": 361,
+        "ymax": 297,
+        "xmax": 639
       }
     },
     {
@@ -150,22 +151,22 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 275,
-        "xmin": 362,
-        "ymax": 277,
-        "xmax": 626
+        "ymin": 298,
+        "xmin": 361,
+        "ymax": 313,
+        "xmax": 639
       }
     },
     {
       "page_number": 1,
       "text": "as needed so that it no preservation",
       "ai_confidence_label": "high",
-      "ai_notes": "",
+      "ai_notes": "Hyphenated word joined across line break.",
       "line_box": {
-        "ymin": 292,
-        "xmin": 362,
-        "ymax": 294,
-        "xmax": 626
+        "ymin": 315,
+        "xmin": 360,
+        "ymax": 330,
+        "xmax": 586
       }
     },
     {
@@ -174,16 +175,15 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 319,
-        "xmin": 362,
+        "ymin": 321,
+        "xmin": 342,
         "ymax": 327,
-        "xmax": 626
+        "xmax": 500
       }
     }
   ],
   "confidence_score": 0.99,
+  "confidence_label": "high",
   "model": "gemini/gemini-3.1-pro-preview",
-  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium",
-  "ai_confidence_label": "high",
-  "schema_version": 2
+  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
 }

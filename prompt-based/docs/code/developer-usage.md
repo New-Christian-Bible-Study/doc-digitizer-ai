@@ -16,6 +16,8 @@ Run the live transcription integration test subset:
 pytest -q -k transcribe_chunk
 ```
 
+After Paddle or Pass 1 changes, refresh raw transcription fixtures with `make -C prompt-based/tests realclean` then `make -C prompt-based/tests raw`, then `make -C prompt-based/tests review`; see [prompt-based/tests/README.md](../../tests/README.md#paddle--raw-fixture-refresh).
+
 ## Regenerate fixture PDFs
 
 If you edit fixture AsciiDoc files, regenerate fixture PDFs with:

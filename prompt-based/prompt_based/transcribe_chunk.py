@@ -15,6 +15,12 @@ import questionary
 import structlog
 from jsonargparse import ArgumentParser as JsonArgParser
 from litellm import completion
+from litellm.exceptions import (
+    APIConnectionError,
+    InternalServerError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 from pypdf import PdfReader
 
 from prompt_based.chunk_generator import ChunkGenerator
@@ -33,6 +39,15 @@ TRANSCRIBE_CONFIG_FILENAME = 'transcribe.config.json'
 VALID_REASONING_EFFORTS = ('none', 'disable', 'low', 'medium', 'high', 'minimal')
 VALID_MEDIA_RESOLUTIONS = ('low', 'medium', 'high', 'ultra_high', 'auto')
 DEFAULT_TIMEOUT_SECONDS = 900.0
+DEFAULT_LLM_RETRY_MAX_ATTEMPTS = 10
+DEFAULT_LLM_RETRY_WAIT_SECONDS = 30.0
+_RETRYABLE_LITELLM_ERROR_TYPES = (
+    ServiceUnavailableError,
+    RateLimitError,
+    InternalServerError,
+    APIConnectionError,
+)
+_RETRYABLE_HTTP_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 RUNTIME_LOG_FILENAME = 'transcribe-runtime.jsonl'
 RUNTIME_LOG_JSON_KEY_ORDER = (
     'run_started_at',
@@ -428,6 +443,36 @@ def get_page_count(path: Path) -> int:
         raise ValueError(f'Could not read page count from {path}: {exc}') from exc
 
 
+def is_retryable_litellm_error(exc: BaseException) -> bool:
+    if isinstance(exc, _RETRYABLE_LITELLM_ERROR_TYPES):
+        return True
+    status_code = getattr(exc, 'status_code', None)
+    return status_code in _RETRYABLE_HTTP_STATUS_CODES
+
+
+def completion_with_retry(
+    *,
+    max_attempts: int = DEFAULT_LLM_RETRY_MAX_ATTEMPTS,
+    wait_seconds: float = DEFAULT_LLM_RETRY_WAIT_SECONDS,
+    **completion_kwargs,
+) -> tuple[object, float]:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            attempt_start = time.perf_counter()
+            response = completion(**completion_kwargs)
+            return response, time.perf_counter() - attempt_start
+        except Exception as exc:
+            if not is_retryable_litellm_error(exc) or attempt >= max_attempts:
+                raise
+            print(
+                f'LiteLLM temporarily unavailable (attempt {attempt}/{max_attempts}): '
+                f'{exc}. Retrying in {wait_seconds:.0f}s...',
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(wait_seconds)
+
+
 def extract_usage_tokens(response) -> tuple[object, object, object]:
     """Return (prompt_tokens, completion_tokens, total_tokens) from a LiteLLM response."""
     usage = getattr(response, 'usage', None)
@@ -626,22 +671,21 @@ def transcribe_single_chunk(
         flush=True,
     )
 
+    completion_kwargs = {
+        'model': transcribe_config['model'],
+        'messages': build_messages(
+            transcribe_config['sys_instructions'],
+            prompt_text,
+            pdf_data_url,
+            transcribe_config['media_resolution'],
+        ),
+        'temperature': transcribe_config['temperature'],
+        'reasoning_effort': transcribe_config['reasoning_effort'],
+        'response_format': build_response_format(pass1_schema),
+        'timeout': transcribe_config['timeout_seconds'],
+    }
     try:
-        inference_start = time.perf_counter()
-        response = completion(
-            model=transcribe_config['model'],
-            messages=build_messages(
-                transcribe_config['sys_instructions'],
-                prompt_text,
-                pdf_data_url,
-                transcribe_config['media_resolution'],
-            ),
-            temperature=transcribe_config['temperature'],
-            reasoning_effort=transcribe_config['reasoning_effort'],
-            response_format=build_response_format(pass1_schema),
-            timeout=transcribe_config['timeout_seconds'],
-        )
-        inference_time_seconds = time.perf_counter() - inference_start
+        response, inference_time_seconds = completion_with_retry(**completion_kwargs)
     except Exception as exc:
         print(f'LiteLLM request failed: {exc}', file=sys.stderr)
         return 1

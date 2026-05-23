@@ -1,4 +1,5 @@
 {
+  "schema_version": 2,
   "lines": [
     {
       "page_number": 1,
@@ -6,22 +7,22 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 54,
-        "xmin": 292,
-        "ymax": 77,
-        "xmax": 706
+        "ymin": 53,
+        "xmin": 293,
+        "ymax": 78,
+        "xmax": 704
       }
     },
     {
       "page_number": 1,
-      "text": "=== Page 1",
+      "text": "== Page 1",
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 117,
+        "ymin": 112,
         "xmin": 80,
-        "ymax": 133,
-        "xmax": 199
+        "ymax": 139,
+        "xmax": 201
       }
     },
     {
@@ -30,9 +31,9 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 159,
-        "xmin": 80,
-        "ymax": 168,
+        "ymin": 155,
+        "xmin": 79,
+        "ymax": 172,
         "xmax": 615
       }
     },
@@ -42,10 +43,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 55,
-        "xmin": 80,
-        "ymax": 71,
-        "xmax": 199
+        "ymin": 49,
+        "xmin": 79,
+        "ymax": 77,
+        "xmax": 201
       }
     },
     {
@@ -54,9 +55,9 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 97,
-        "xmin": 80,
-        "ymax": 106,
+        "ymin": 93,
+        "xmin": 79,
+        "ymax": 109,
         "xmax": 615
       }
     },
@@ -66,10 +67,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 53,
-        "xmin": 80,
-        "ymax": 71,
-        "xmax": 199
+        "ymin": 49,
+        "xmin": 79,
+        "ymax": 77,
+        "xmax": 201
       }
     },
     {
@@ -78,16 +79,15 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 97,
-        "xmin": 80,
-        "ymax": 106,
+        "ymin": 93,
+        "xmin": 79,
+        "ymax": 109,
         "xmax": 615
       }
     }
   ],
   "confidence_score": 0.99,
+  "confidence_label": "high",
   "model": "gemini/gemini-3.1-pro-preview",
-  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium",
-  "ai_confidence_label": "high",
-  "schema_version": 2
+  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
 }

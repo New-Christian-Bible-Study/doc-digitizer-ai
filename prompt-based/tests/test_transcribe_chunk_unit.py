@@ -459,3 +459,44 @@ def test_disk_raw_schema_accepts_v2_payload():
         'confidence_label': 'high',
     }
     jsonschema.validate(instance=payload, schema=schema)
+
+
+def test_is_retryable_litellm_error_detects_service_unavailable():
+    from litellm.exceptions import ServiceUnavailableError
+
+    module = load_transcribe_module()
+    exc = ServiceUnavailableError('unavailable', 'gemini/x', 'gemini')
+    assert module.is_retryable_litellm_error(exc) is True
+
+
+def test_is_retryable_litellm_error_rejects_other_failures():
+    module = load_transcribe_module()
+    assert module.is_retryable_litellm_error(ValueError('bad config')) is False
+
+
+def test_completion_with_retry_waits_and_succeeds(monkeypatch):
+    from litellm.exceptions import ServiceUnavailableError
+
+    module = load_transcribe_module()
+    calls = {'n': 0}
+    sleeps: list[float] = []
+
+    def fake_completion(**kwargs):
+        calls['n'] += 1
+        if calls['n'] < 3:
+            raise ServiceUnavailableError('503', 'gemini/x', 'gemini')
+        return SimpleNamespace(ok=True)
+
+    monkeypatch.setattr(module, 'completion', fake_completion)
+    monkeypatch.setattr(module.time, 'sleep', lambda s: sleeps.append(s))
+
+    response, inference_seconds = module.completion_with_retry(
+        model='gemini/x',
+        max_attempts=10,
+        wait_seconds=30.0,
+    )
+
+    assert response.ok is True
+    assert inference_seconds >= 0.0
+    assert calls['n'] == 3
+    assert sleeps == [30.0, 30.0]

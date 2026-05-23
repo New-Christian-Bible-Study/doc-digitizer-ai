@@ -1,4 +1,5 @@
 {
+  "schema_version": 2,
   "lines": [
     {
       "page_number": 1,
@@ -6,10 +7,10 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 55,
-        "xmin": 80,
-        "ymax": 71,
-        "xmax": 200
+        "ymin": 49,
+        "xmin": 79,
+        "ymax": 77,
+        "xmax": 203
       }
     },
     {
@@ -18,9 +19,9 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 97,
-        "xmin": 80,
-        "ymax": 106,
+        "ymin": 93,
+        "xmin": 79,
+        "ymax": 109,
         "xmax": 615
       }
     },
@@ -30,9 +31,9 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 56,
+        "ymin": 50,
         "xmin": 80,
-        "ymax": 71,
+        "ymax": 76,
         "xmax": 200
       }
     },
@@ -42,16 +43,15 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 97,
-        "xmin": 80,
-        "ymax": 106,
+        "ymin": 93,
+        "xmin": 79,
+        "ymax": 109,
         "xmax": 615
       }
     }
   ],
   "confidence_score": 1.0,
+  "confidence_label": "high",
   "model": "gemini/gemini-3.1-pro-preview",
-  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium",
-  "ai_confidence_label": "high",
-  "schema_version": 2
+  "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"
 }

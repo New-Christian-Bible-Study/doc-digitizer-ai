@@ -67,6 +67,9 @@
           },
           "reviewer_changed": {
             "type": "boolean"
+          },
+          "excluded": {
+            "type": "boolean"
           }
         }
       }

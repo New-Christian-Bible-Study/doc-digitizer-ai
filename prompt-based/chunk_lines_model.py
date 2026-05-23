@@ -84,6 +84,8 @@ _PAGE_MARKER_PATTERN = re.compile(r'^\s*//\s*Page\s+\d+\s*$', re.IGNORECASE)
 REVIEW_COMPLETE_KEY = 'review_complete'
 # Per-editable-line final JSON flag: whether reviewer text differs from raw baseline.
 REVIEWER_CHANGED_KEY = 'reviewer_changed'
+# Per-editable-line final JSON flag: exclude line text from .adoc export.
+REVIEWER_EXCLUDED_KEY = 'excluded'
 
 
 def is_injected_page_marker(text: object) -> bool:
@@ -162,6 +164,7 @@ class LineRecord:
     Reviewer metadata (edited in review-chunk, saved to ``*_final.json``):
     - ``reviewer_confidence_label``, ``reviewer_notes``
     - ``reviewer_changed`` — whether text differs from raw baseline at save time.
+    - ``excluded`` — exclude line text from .adoc export while keeping audit metadata.
 
     Geometry (written at transcribe time):
     - ``line_box`` / legacy ``box_2d``, ``page_number``
@@ -234,6 +237,15 @@ class LineRecord:
 
     def reviewer_changed(self) -> bool:
         return bool(self.data.get(REVIEWER_CHANGED_KEY, False))
+
+    def set_excluded(self, value: bool) -> None:
+        if value:
+            self.data[REVIEWER_EXCLUDED_KEY] = True
+        else:
+            self.data.pop(REVIEWER_EXCLUDED_KEY, None)
+
+    def excluded(self) -> bool:
+        return bool(self.data.get(REVIEWER_EXCLUDED_KEY, False))
 
 
 def resolve_transcription_paths_for_chunk(
@@ -804,6 +816,8 @@ class ChunkLinesSession:
         unchanged_low = 0
         for idx in self.editable_indices:
             line = self.line_records[idx]
+            if line.excluded():
+                continue
             if line.ai_confidence_label() != 'low':
                 continue
             total_low += 1

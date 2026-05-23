@@ -99,6 +99,8 @@ def lines_to_adoc_body(
     texts = []
     for item in lines:
         if isinstance(item, dict) and 'text' in item:
+            if item.get('excluded') is True:
+                continue
             t = item.get('text', '')
             if not isinstance(t, str):
                 t = ''

@@ -172,6 +172,8 @@ class ReviewMainWindow(QMainWindow):
         self._review_conf_combos: list[QComboBox] = []
         self._review_note_edits: list[QLineEdit] = []
         self._review_panel_forced_visible: list[bool] = []
+        self._line_exclude_buttons: list[QPushButton] = []
+        self._line_excluded: list[bool] = []
 
         # Left pane: fitted page pixmap, optional scene padding for bottom-line alignment, zoom.
         self._page_pixmap: QPixmap | None = None
@@ -376,6 +378,8 @@ class ReviewMainWindow(QMainWindow):
         self._review_conf_combos = []
         self._review_note_edits = []
         self._review_panel_forced_visible = []
+        self._line_exclude_buttons = []
+        self._line_excluded = []
         self._last_align_ridx = None
 
     def populate_lines(self, session: ChunkLinesSession, ctrl: 'ReviewChunkLinesController') -> None:
@@ -424,6 +428,12 @@ class ReviewMainWindow(QMainWindow):
             )
             input_row.addWidget(review_btn)
 
+            exclude_btn = QPushButton('Exclude')
+            exclude_btn.clicked.connect(
+                lambda _checked=False, i=ridx: self._toggle_line_excluded(i, ctrl),
+            )
+            input_row.addWidget(exclude_btn)
+
             review_panel = QWidget()
             review_panel_layout = QHBoxLayout(review_panel)
             review_panel_layout.setContentsMargins(0, 0, 0, 0)
@@ -468,6 +478,8 @@ class ReviewMainWindow(QMainWindow):
             self._review_conf_combos.append(reviewer_conf)
             self._review_note_edits.append(reviewer_note)
             self._review_panel_forced_visible.append(False)
+            self._line_exclude_buttons.append(exclude_btn)
+            self._line_excluded.append(record.excluded())
             reviewer_conf.currentTextChanged.connect(
                 lambda _text, i=ridx: self._on_reviewer_metadata_changed(i),
             )
@@ -477,7 +489,9 @@ class ReviewMainWindow(QMainWindow):
             )
             reviewer_note.textChanged.connect(ctrl._on_text_changed)
             self._update_reviewer_note_button(ridx)
+            self._update_exclude_button(ridx)
             self._on_editor_text_changed(ridx)
+            self._apply_excluded_line_style(ridx)
 
     def _apply_row_confidence_style(self, row: QWidget, badge: QLabel, label: str | None) -> None:
         if label == 'low':
@@ -728,6 +742,11 @@ class ReviewMainWindow(QMainWindow):
             return ''
         return self._review_note_edits[ridx].text()
 
+    def line_excluded(self, ridx: int) -> bool:
+        if 0 <= ridx < len(self._line_excluded):
+            return self._line_excluded[ridx]
+        return False
+
     def set_prev_next_enabled(self, prev_enabled: bool, next_enabled: bool) -> None:
         self._btn_prev.setEnabled(prev_enabled)
         self._btn_next.setEnabled(next_enabled)
@@ -752,6 +771,9 @@ class ReviewMainWindow(QMainWindow):
 
     def _apply_edited_line_style(self, ridx: int, changed: bool) -> None:
         if not (0 <= ridx < len(self._line_edits)):
+            return
+        if ridx < len(self._line_excluded) and self._line_excluded[ridx]:
+            self._apply_excluded_line_style(ridx)
             return
         if changed:
             self._line_edits[ridx].setStyleSheet(
@@ -786,6 +808,49 @@ class ReviewMainWindow(QMainWindow):
             return
         has_data = self._has_reviewer_data(ridx)
         self._review_note_buttons[ridx].setText('Remove note' if has_data else 'Add note')
+
+    def _toggle_line_excluded(
+        self,
+        ridx: int,
+        ctrl: 'ReviewChunkLinesController',
+    ) -> None:
+        if not (0 <= ridx < len(self._line_excluded)):
+            return
+        self._line_excluded[ridx] = not self._line_excluded[ridx]
+        self._update_exclude_button(ridx)
+        self._apply_excluded_line_style(ridx)
+        ctrl._on_text_changed()
+
+    def _update_exclude_button(self, ridx: int) -> None:
+        if not (0 <= ridx < len(self._line_exclude_buttons)):
+            return
+        excluded = self._line_excluded[ridx] if ridx < len(self._line_excluded) else False
+        self._line_exclude_buttons[ridx].setText('Include' if excluded else 'Exclude')
+
+    def _apply_excluded_line_style(self, ridx: int) -> None:
+        if not (0 <= ridx < len(self._line_rows)):
+            return
+        excluded = self._line_excluded[ridx] if ridx < len(self._line_excluded) else False
+        row = self._line_rows[ridx]
+        edit = self._line_edits[ridx]
+        conf = self._line_conf_labels[ridx] if ridx < len(self._line_conf_labels) else 'high'
+        badge = self._line_badges[ridx] if ridx < len(self._line_badges) else None
+        if excluded:
+            row.setStyleSheet(
+                'QWidget { border: 1px solid #777; border-radius: 5px; background: #f4f4f4; }',
+            )
+            if badge is not None:
+                badge.setStyleSheet('QLabel { color: #999; font-weight: 600; }')
+            edit.setStyleSheet(
+                'QLineEdit { padding-top: 2px; padding-bottom: 2px; color: #888; '
+                'border: 1px solid #bbb; border-radius: 4px; }',
+            )
+            return
+        if badge is not None:
+            self._apply_row_confidence_style(row, badge, conf)
+        current_text = edit.text().rstrip()
+        changed = current_text != self._line_original_texts[ridx]
+        self._apply_edited_line_style(ridx, changed)
 
     def _on_reviewer_note_action_clicked(self, ridx: int) -> None:
         if not (0 <= ridx < len(self._review_note_edits)):
@@ -1066,6 +1131,7 @@ class ReviewChunkLinesController:
             record = self._session.line_records[payload_idx]
             record.set_reviewer_confidence_label(self._view.reviewer_confidence_value(ridx))
             record.set_reviewer_notes(self._view.reviewer_note_text(ridx))
+            record.set_excluded(self._view.line_excluded(ridx))
         self._session.refresh_reviewer_changed_flags()
 
 

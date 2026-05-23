@@ -22,3 +22,16 @@ def test_schema_path_for_json_uses_final_suffix():
 
     assert module.schema_path_for_json(raw_path).name == 'raw-transcription.schema.json'
     assert module.schema_path_for_json(final_path).name == 'final-transcription.schema.json'
+
+
+def test_lines_to_adoc_body_skips_excluded_lines():
+    module = load_module()
+    payload = {
+        'lines': [
+            {'text': 'keep me'},
+            {'text': '23181', 'excluded': True},
+            {'text': 'also keep'},
+        ],
+    }
+
+    assert module.lines_to_adoc_body(payload) == 'keep me\nalso keep'

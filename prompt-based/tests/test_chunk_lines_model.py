@@ -6,6 +6,7 @@ from chunk_lines_model import (
     LineRecord,
     REVIEW_COMPLETE_KEY,
     REVIEWER_CHANGED_KEY,
+    REVIEWER_EXCLUDED_KEY,
     REVIEW_PDF_RASTER_DPI,
     ChunkLinesSession,
     TranscriptionPaths,
@@ -88,6 +89,20 @@ def test_line_record_reviewer_metadata_round_trip():
     assert record.reviewer_confidence_label() is None
 
 
+def test_line_record_excluded_round_trip():
+    record = LineRecord.from_object({})
+    assert record.excluded() is False
+    assert REVIEWER_EXCLUDED_KEY not in record.data
+
+    record.set_excluded(True)
+    assert record.excluded() is True
+    assert record.data[REVIEWER_EXCLUDED_KEY] is True
+
+    record.set_excluded(False)
+    assert record.excluded() is False
+    assert REVIEWER_EXCLUDED_KEY not in record.data
+
+
 def test_line_text_returns_rstripped_string():
     assert line_text({'text': 'abc   '}) == 'abc'
     assert line_text({'text': None}) == ''
@@ -158,6 +173,23 @@ def test_low_confidence_unchanged_stats_counts_only_low():
     unchanged_low, total_low = session.low_confidence_unchanged_stats()
     assert unchanged_low == 1
     assert total_low == 2
+
+
+def test_low_confidence_unchanged_stats_skips_excluded():
+    session = ChunkLinesSession()
+    session.payload = {'lines': [{'text': 'a'}, {'text': 'b'}]}
+    session.lines = session.payload['lines']
+    session.line_records = [LineRecord.from_object(line) for line in session.lines]
+    session.editable_indices = [0, 1]
+    session.lines[0]['ai_confidence_label'] = 'low'
+    session.lines[1]['ai_confidence_label'] = 'low'
+    session.lines[0][REVIEWER_CHANGED_KEY] = False
+    session.lines[1][REVIEWER_CHANGED_KEY] = False
+    session.lines[1][REVIEWER_EXCLUDED_KEY] = True
+
+    unchanged_low, total_low = session.low_confidence_unchanged_stats()
+    assert unchanged_low == 1
+    assert total_low == 1
 
 
 def test_reload_from_raw_restores_missing_confidence_metadata(tmp_path: Path):

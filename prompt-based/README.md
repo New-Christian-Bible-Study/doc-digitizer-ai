@@ -173,6 +173,7 @@ python prompt-based/review-chunk.py --working-dir prompt-based/tests/test-1
 - `--raw-json` is optional; defaults to `<working-dir>/transcriptions/<stem>_raw.json`. Relative paths are resolved under `--working-dir`.
 - If `_final.json` already exists for that stem, it is loaded so you can resume editing.
 - If loaded `_final.json` already has `review_complete: true`, the app prompts whether to keep it complete or reset completion and continue editing.
+- **Keyboard navigation:** ↑/↓ in a line field moves to the previous/next line and updates the scan highlight; Alt+↑/↓ does the same from anywhere in the window; Page Up/Down jumps to the previous/next PDF page and selects the topmost line on that page.
 - **Mark review complete** button: confirms completion, warns when low-confidence lines remain unchanged, then sets `review_complete=true`, saves, and exits.
 - **Quit:** Close the window, or press Ctrl-C in the terminal (the app installs a handler so this works with Qt). If the process is stuck, from another terminal: `pkill -f review-chunk.py` or `kill <pid>` (`kill -9` only as a last resort).
 

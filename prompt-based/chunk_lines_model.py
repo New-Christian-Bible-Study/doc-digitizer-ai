@@ -668,6 +668,42 @@ def normalized_center_y_for_line(line: dict) -> float | None:
     return max(0.0, min(float(BOX_2D_NORMALIZED_MAX), (float(ymin) + float(ymax)) / 2.0))
 
 
+def topmost_editable_ridx_for_page(
+    lines: list,
+    editable_indices: list[int],
+    page_number: int,
+) -> int | None:
+    """Return ridx of the topmost editable line on ``page_number``, or ``None`` if none.
+
+    Topmost means smallest ``ymin`` on the 0-1000 grid; tie-break by ``xmin``, then ridx.
+    When no line on the page has a valid box, returns the first editable line on that page
+    in transcript order.
+    """
+    best_ridx: int | None = None
+    best_key: tuple[int, int, int] | None = None
+    first_no_box_ridx: int | None = None
+
+    for ridx, payload_idx in enumerate(editable_indices):
+        line = lines[payload_idx]
+        pn = line.get('page_number')
+        if not isinstance(pn, int) or pn != page_number:
+            continue
+        four = line_aabb_four_ints(line)
+        if four is None:
+            if first_no_box_ridx is None:
+                first_no_box_ridx = ridx
+            continue
+        ymin, xmin, _ymax, _xmax = four
+        key = (int(ymin), int(xmin), ridx)
+        if best_key is None or key < best_key:
+            best_key = key
+            best_ridx = ridx
+
+    if best_ridx is not None:
+        return best_ridx
+    return first_no_box_ridx
+
+
 def line_confidence_label(line: dict) -> str | None:
     return LineRecord.from_object(line).ai_confidence_label()
 

@@ -16,6 +16,7 @@ from chunk_lines_model import (
     line_notes,
     line_aabb_four_ints,
     normalized_center_y_for_line,
+    topmost_editable_ridx_for_page,
     resolve_chunk_pdf_dir,
     resolve_transcription_paths_for_chunk,
 )
@@ -63,6 +64,40 @@ def test_line_aabb_four_ints_prefers_line_box():
     lb = {'ymin': 1, 'xmin': 2, 'ymax': 3, 'xmax': 4}
     assert line_aabb_four_ints({'line_box': lb, 'box_2d': [9, 9, 9, 9]}) == [1, 2, 3, 4]
     assert line_aabb_four_ints({'box_2d': [5, 6, 7, 8]}) == [5, 6, 7, 8]
+
+
+def test_topmost_editable_ridx_for_page_picks_smallest_ymin():
+    lines = [
+        {'page_number': 1, 'line_box': {'ymin': 200, 'xmin': 0, 'ymax': 220, 'xmax': 10}},
+        {'page_number': 1, 'line_box': {'ymin': 50, 'xmin': 0, 'ymax': 70, 'xmax': 10}},
+        {'page_number': 2, 'line_box': {'ymin': 10, 'xmin': 0, 'ymax': 30, 'xmax': 10}},
+    ]
+    editable_indices = [0, 1, 2]
+    assert topmost_editable_ridx_for_page(lines, editable_indices, 1) == 1
+
+
+def test_topmost_editable_ridx_for_page_tie_breaks_on_xmin():
+    lines = [
+        {'page_number': 1, 'line_box': {'ymin': 50, 'xmin': 20, 'ymax': 70, 'xmax': 30}},
+        {'page_number': 1, 'line_box': {'ymin': 50, 'xmin': 5, 'ymax': 70, 'xmax': 15}},
+    ]
+    editable_indices = [0, 1]
+    assert topmost_editable_ridx_for_page(lines, editable_indices, 1) == 1
+
+
+def test_topmost_editable_ridx_for_page_falls_back_to_first_without_box():
+    lines = [
+        {'page_number': 1, 'text': 'no box'},
+        {'page_number': 1, 'text': 'also no box'},
+    ]
+    editable_indices = [0, 1]
+    assert topmost_editable_ridx_for_page(lines, editable_indices, 1) == 0
+
+
+def test_topmost_editable_ridx_for_page_returns_none_for_empty_page():
+    lines = [{'page_number': 2, 'line_box': {'ymin': 1, 'xmin': 0, 'ymax': 2, 'xmax': 1}}]
+    editable_indices = [0]
+    assert topmost_editable_ridx_for_page(lines, editable_indices, 1) is None
 
 
 def test_line_confidence_label_normalizes_and_validates():

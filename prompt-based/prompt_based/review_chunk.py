@@ -24,8 +24,8 @@ import signal
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QImage, QPen, QPixmap, QShortcut
+from PySide6.QtCore import QEvent, QObject, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QImage, QKeySequence, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -47,6 +47,34 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+_PAGE_VIEW_STYLE = """
+QGraphicsView {
+    border: none;
+    background-color: #f5f5f5;
+}
+QGraphicsView QScrollBar:vertical {
+    background: #ececec;
+    width: 14px;
+    margin: 0;
+}
+QGraphicsView QScrollBar::handle:vertical {
+    background: #a8a8a8;
+    min-height: 40px;
+    border-radius: 3px;
+    margin: 2px;
+}
+QGraphicsView QScrollBar::add-line:vertical,
+QGraphicsView QScrollBar::sub-line:vertical {
+    height: 0px;
+    border: none;
+    background: none;
+}
+QGraphicsView QScrollBar::add-page:vertical,
+QGraphicsView QScrollBar::sub-page:vertical {
+    background: none;
+}
+"""
+
 from PIL import Image
 
 from prompt_based.review_chunk_args import parse_cli_args
@@ -59,6 +87,7 @@ from prompt_based.chunk_lines_model import (
     list_chunk_filenames,
     normalized_center_y_for_line,
     resolve_chunk_pdf_dir,
+    topmost_editable_ridx_for_page,
 )
 
 CHUNK_STATE_FILENAME = '.chunk-state.json'
@@ -174,6 +203,8 @@ class ReviewMainWindow(QMainWindow):
         self._review_panel_forced_visible: list[bool] = []
         self._line_exclude_buttons: list[QPushButton] = []
         self._line_excluded: list[bool] = []
+        self._active_ridx: int | None = None
+        self._page_nav_filter: _PageNavEventFilter | None = None
 
         # Left pane: fitted page pixmap, optional scene padding for bottom-line alignment, zoom.
         self._page_pixmap: QPixmap | None = None
@@ -197,12 +228,13 @@ class ReviewMainWindow(QMainWindow):
         self._add_dual_pane(root)
         self._add_navigation_button_row(root)
         self._add_zoom_shortcuts()
+        self._add_navigation_shortcuts()
 
         self.set_review_controls_enabled(False)
 
     def _init_window_shell(self) -> QVBoxLayout:
         """Title, icon, default size, central widget, and root ``QVBoxLayout``."""
-        self.setWindowTitle('Line review (Approximate Sync)')
+        self.setWindowTitle('Review chunk')
         _ic = _review_app_icon()
         if not _ic.isNull():
             self.setWindowIcon(_ic)
@@ -260,6 +292,11 @@ class ReviewMainWindow(QMainWindow):
         root.addWidget(splitter, stretch=1)
 
         self._scene = QGraphicsScene(self)
+        self._scene_bg_item = QGraphicsRectItem()
+        self._scene_bg_item.setBrush(QColor(245, 245, 245))
+        self._scene_bg_item.setPen(QPen(Qt.PenStyle.NoPen))
+        self._scene_bg_item.setZValue(-1)
+        self._scene.addItem(self._scene_bg_item)
         self._page_item = QGraphicsPixmapItem()
         self._scene.addItem(self._page_item)
         self._active_line_box_item = QGraphicsRectItem()
@@ -269,6 +306,7 @@ class ReviewMainWindow(QMainWindow):
         self._active_line_box_item.setVisible(False)
         self._scene.addItem(self._active_line_box_item)
         self._page_view = QGraphicsView(self._scene)
+        self._page_view.setStyleSheet(_PAGE_VIEW_STYLE)
         self._page_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._page_view.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         splitter.addWidget(self._page_view)
@@ -284,22 +322,23 @@ class ReviewMainWindow(QMainWindow):
         splitter.addWidget(self._line_scroll)
         splitter.setSizes([550, 550])
         splitter.splitterMoved.connect(self._on_splitter_moved)
+        self._page_nav_filter = _PageNavEventFilter(self)
+        self._line_scroll.installEventFilter(self._page_nav_filter)
+        self._line_host.installEventFilter(self._page_nav_filter)
 
     def _add_navigation_button_row(self, root: QVBoxLayout):
         """Line navigation and persistence actions for the current chunk."""
         btn_row = QHBoxLayout()
-        self._btn_prev = QPushButton('◀ Prev')
-        self._btn_next = QPushButton('Next ▶')
+        self._btn_prev_flagged = QPushButton('Prev flagged')
         self._btn_next_flagged = QPushButton('Next flagged')
         self._btn_save = QPushButton('Save to final')
-        self._btn_complete_review = QPushButton('Mark review complete')
         self._btn_reload = QPushButton('Reload from raw')
-        btn_row.addWidget(self._btn_prev)
-        btn_row.addWidget(self._btn_next)
+        self._btn_complete_review = QPushButton('Mark review complete')
+        btn_row.addWidget(self._btn_prev_flagged)
         btn_row.addWidget(self._btn_next_flagged)
         btn_row.addWidget(self._btn_save)
-        btn_row.addWidget(self._btn_complete_review)
         btn_row.addWidget(self._btn_reload)
+        btn_row.addWidget(self._btn_complete_review)
         btn_row.addStretch()
         root.addLayout(btn_row)
 
@@ -312,6 +351,29 @@ class ReviewMainWindow(QMainWindow):
         zoom_out.activated.connect(lambda: self.adjust_zoom(1 / 1.15))
         zoom_reset = QShortcut('Ctrl+0', self)
         zoom_reset.activated.connect(self.reset_zoom_to_fit)
+
+    def _add_navigation_shortcuts(self) -> None:
+        """Window-level line and page navigation (see README)."""
+        self._navigation_shortcuts: list[QShortcut] = []
+
+    def bind_navigation_shortcuts(self, ctrl: 'ReviewChunkLinesController') -> None:
+        for shortcut in self._navigation_shortcuts:
+            shortcut.deleteLater()
+        self._navigation_shortcuts = []
+        if self._page_nav_filter is not None:
+            self._page_nav_filter.set_controller(ctrl)
+
+        bindings = (
+            ('Alt+Up', ctrl._on_prev),
+            ('Alt+Down', ctrl._on_next),
+            ('PgUp', ctrl._on_page_up),
+            ('PgDown', ctrl._on_page_down),
+        )
+        for sequence, handler in bindings:
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+            shortcut.activated.connect(handler)
+            self._navigation_shortcuts.append(shortcut)
 
     @property
     def working_dir(self) -> Path:
@@ -331,12 +393,12 @@ class ReviewMainWindow(QMainWindow):
 
     def connect_controller_signals(self, ctrl: 'ReviewChunkLinesController') -> None:
         self._chunk_combo.currentIndexChanged.connect(ctrl._on_chunk_combo_index_changed)
-        self._btn_prev.clicked.connect(ctrl._on_prev)
-        self._btn_next.clicked.connect(ctrl._on_next)
+        self._btn_prev_flagged.clicked.connect(ctrl._on_prev_flagged)
         self._btn_next_flagged.clicked.connect(ctrl._on_next_flagged)
         self._btn_save.clicked.connect(ctrl._on_save)
         self._btn_complete_review.clicked.connect(ctrl._on_complete_review)
         self._btn_reload.clicked.connect(ctrl._on_reload)
+        self.bind_navigation_shortcuts(ctrl)
 
     def sync_combo_to_chunk_name(self, chunk_name: str | None) -> None:
         if chunk_name is None:
@@ -352,8 +414,7 @@ class ReviewMainWindow(QMainWindow):
         self._final_path_lbl.setText(final_name)
 
     def set_review_controls_enabled(self, enabled: bool) -> None:
-        self._btn_prev.setEnabled(enabled)
-        self._btn_next.setEnabled(enabled)
+        self._btn_prev_flagged.setEnabled(enabled)
         self._btn_next_flagged.setEnabled(enabled)
         self._btn_save.setEnabled(enabled)
         self._btn_complete_review.setEnabled(enabled)
@@ -381,6 +442,7 @@ class ReviewMainWindow(QMainWindow):
         self._line_exclude_buttons = []
         self._line_excluded = []
         self._last_align_ridx = None
+        self._active_ridx = None
 
     def _assert_row_ridx(self, ridx: int) -> None:
         """Require ``ridx`` to index a populated editor row.
@@ -424,7 +486,10 @@ class ReviewMainWindow(QMainWindow):
                 warn = None
 
             edit = FocusLineEdit(ridx)
-            edit.setStyleSheet('QLineEdit { padding-top: 2px; padding-bottom: 2px; }')
+            edit.setStyleSheet(
+                'QLineEdit { padding-top: 2px; padding-bottom: 2px; }'
+                'QLineEdit:focus { border: 1px solid #b8b8b8; }'
+            )
             original_text = (
                 line.get('text', '') if isinstance(line.get('text', ''), str) else ''
             ).rstrip()
@@ -432,18 +497,24 @@ class ReviewMainWindow(QMainWindow):
             edit.textChanged.connect(ctrl._on_text_changed)
             edit.textChanged.connect(lambda _text, i=ridx: self._on_editor_text_changed(i))
             edit.focused.connect(ctrl._on_row_focused)
+            edit.navigate_prev.connect(lambda _ridx: ctrl._on_prev())
+            edit.navigate_next.connect(lambda _ridx: ctrl._on_next())
+            edit.navigate_page_up.connect(lambda _ridx: ctrl._on_page_up())
+            edit.navigate_page_down.connect(lambda _ridx: ctrl._on_page_down())
             input_row = QHBoxLayout()
             input_row.setContentsMargins(0, 0, 0, 0)
             input_row.setSpacing(6)
             input_row.addWidget(edit, stretch=1)
 
             review_btn = QPushButton('Add note')
+            review_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             review_btn.clicked.connect(
                 lambda _checked=False, i=ridx: self._on_reviewer_note_action_clicked(i),
             )
             input_row.addWidget(review_btn)
 
             exclude_btn = QPushButton('Exclude')
+            exclude_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             exclude_btn.clicked.connect(
                 lambda _checked=False, i=ridx: self._toggle_line_excluded(i, ctrl),
             )
@@ -478,6 +549,7 @@ class ReviewMainWindow(QMainWindow):
             review_panel.setVisible(has_reviewer_data)
 
             self._apply_row_confidence_style(row, badge, conf)
+            row.setStyleSheet(self._row_confidence_stylesheet(conf, active=False))
 
             self._line_layout.insertWidget(self._line_layout.count() - 1, row)
             self._line_rows.append(row)
@@ -508,21 +580,52 @@ class ReviewMainWindow(QMainWindow):
             self._on_editor_text_changed(ridx)
             self._apply_excluded_line_style(ridx)
 
+    def _row_confidence_stylesheet(self, label: str | None, *, active: bool) -> str:
+        if label == 'low':
+            base = 'QWidget { border: 1px solid #6f2e2e; border-radius: 5px;'
+        elif label == 'medium':
+            base = 'QWidget { border: 1px solid #796324; border-radius: 5px;'
+        else:
+            base = 'QWidget { border-radius: 5px;'
+        if active:
+            base += ' background-color: #eef5ff;'
+        return base + ' }'
+
     def _apply_row_confidence_style(self, row: QWidget, badge: QLabel, label: str | None) -> None:
         if label == 'low':
-            row.setStyleSheet('QWidget { border: 1px solid #6f2e2e; border-radius: 5px; }')
             badge.setStyleSheet('QLabel { color: #cf3a3a; font-weight: 700; }')
         elif label == 'medium':
-            row.setStyleSheet('QWidget { border: 1px solid #796324; border-radius: 5px; }')
             badge.setStyleSheet('QLabel { color: #9d7d1d; font-weight: 700; }')
         else:
-            row.setStyleSheet('')
             badge.setStyleSheet('QLabel { color: #cfcfcf; font-weight: 600; }')
 
-    def set_active_row(self, ridx: int) -> None:
+    def _set_active_ridx(self, ridx: int) -> None:
+        old = self._active_ridx
+        self._active_ridx = ridx
+        if old is not None and 0 <= old < len(self._line_rows):
+            self._refresh_row_container_style(old)
+        if 0 <= ridx < len(self._line_rows):
+            self._refresh_row_container_style(ridx)
+
+    def _refresh_row_container_style(self, ridx: int) -> None:
+        if not (0 <= ridx < len(self._line_rows)):
+            return
+        if ridx < len(self._line_excluded) and self._line_excluded[ridx]:
+            self._apply_excluded_line_style(ridx)
+            return
+        row = self._line_rows[ridx]
+        conf = self._line_conf_labels[ridx]
+        badge = self._line_badges[ridx]
+        active = ridx == self._active_ridx
+        row.setStyleSheet(self._row_confidence_stylesheet(conf, active=active))
+        self._apply_row_confidence_style(row, badge, conf)
+
+    def set_active_row(self, ridx: int, *, select_all: bool = False) -> None:
         if 0 <= ridx < len(self._line_edits):
+            self._set_active_ridx(ridx)
             self._line_edits[ridx].setFocus()
-            self._line_edits[ridx].selectAll()
+            if select_all:
+                self._line_edits[ridx].selectAll()
             self._line_scroll.ensureWidgetVisible(self._line_edits[ridx], 0, 100)
 
     def set_page_image(self, page_image: Image.Image | None) -> None:
@@ -537,6 +640,7 @@ class ReviewMainWindow(QMainWindow):
             self._page_item.setPos(0.0, 0.0)
             self._active_line_box_item.setPos(0.0, 0.0)
             self._active_line_box_item.setVisible(False)
+            self._scene_bg_item.setRect(QRectF(0.0, 0.0, 1.0, 1.0))
             self._scene.setSceneRect(QRectF(0.0, 0.0, 1.0, 1.0))
             return
         self._page_pixmap = pil_to_qpixmap(page_image)
@@ -673,9 +777,10 @@ class ReviewMainWindow(QMainWindow):
         self._page_top_pad = top_pad
         self._page_item.setPos(0.0, top_pad)
         self._active_line_box_item.setPos(0.0, top_pad)
-        self._scene.setSceneRect(
-            QRectF(0.0, 0.0, page_w, top_pad + page_h + bot_pad),
-        )
+        scene_rect = QRectF(0.0, 0.0, page_w, top_pad + page_h + bot_pad)
+        self._scene_bg_item.setRect(scene_rect)
+        self._scene.setSceneRect(scene_rect)
+        self._page_view.verticalScrollBar().update()
 
     def _smooth_center_on_y(self, y: int) -> None:
         y_scene = float(y) + self._page_top_pad
@@ -758,9 +863,9 @@ class ReviewMainWindow(QMainWindow):
         self._assert_row_ridx(ridx)
         return self._line_excluded[ridx]
 
-    def set_prev_next_enabled(self, prev_enabled: bool, next_enabled: bool) -> None:
-        self._btn_prev.setEnabled(prev_enabled)
-        self._btn_next.setEnabled(next_enabled)
+    def set_flagged_nav_enabled(self, prev_enabled: bool, next_enabled: bool) -> None:
+        self._btn_prev_flagged.setEnabled(prev_enabled)
+        self._btn_next_flagged.setEnabled(next_enabled)
 
     def _on_editor_text_changed(self, ridx: int) -> None:
         if not (0 <= ridx < len(self._line_edits)):
@@ -794,6 +899,7 @@ class ReviewMainWindow(QMainWindow):
         else:
             self._line_edits[ridx].setStyleSheet(
                 'QLineEdit { padding-top: 2px; padding-bottom: 2px; }'
+                'QLineEdit:focus { border: 1px solid #b8b8b8; }'
             )
 
     def _on_reviewer_metadata_changed(self, ridx: int) -> None:
@@ -844,16 +950,23 @@ class ReviewMainWindow(QMainWindow):
         conf = self._line_conf_labels[ridx]
         badge = self._line_badges[ridx]
         if excluded:
-            row.setStyleSheet(
-                'QWidget { border: 1px solid #777; border-radius: 5px; background: #f4f4f4; }',
+            active = ridx == self._active_ridx
+            style = (
+                'QWidget { border: 1px solid #777; border-radius: 5px; background: #f4f4f4;'
             )
+            if active:
+                style = (
+                    'QWidget { border: 1px solid #777; border-radius: 5px; '
+                    'background-color: #eef5ff;'
+                )
+            row.setStyleSheet(style + ' }')
             badge.setStyleSheet('QLabel { color: #999; font-weight: 600; }')
             edit.setStyleSheet(
                 'QLineEdit { padding-top: 2px; padding-bottom: 2px; color: #888; '
                 'border: 1px solid #bbb; border-radius: 4px; }',
             )
             return
-        self._apply_row_confidence_style(row, badge, conf)
+        self._refresh_row_container_style(ridx)
         current_text = edit.text().rstrip()
         changed = current_text != self._line_original_texts[ridx]
         self._apply_edited_line_style(ridx, changed)
@@ -888,15 +1001,58 @@ class ReviewMainWindow(QMainWindow):
         self._update_reviewer_note_button(ridx)
 
 
+class _PageNavEventFilter(QObject):
+    """Route Page Up/Down to PDF page navigation instead of scrolling the line list."""
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._ctrl: ReviewChunkLinesController | None = None
+
+    def set_controller(self, ctrl: 'ReviewChunkLinesController') -> None:
+        self._ctrl = ctrl
+
+    def eventFilter(self, obj, event) -> bool:
+        if self._ctrl is None or event.type() != QEvent.Type.KeyPress:
+            return False
+        key = event.key()
+        if key == Qt.Key.Key_PageUp:
+            self._ctrl._on_page_up()
+            return True
+        if key == Qt.Key.Key_PageDown:
+            self._ctrl._on_page_down()
+            return True
+        return False
+
+
 class FocusLineEdit(QLineEdit):
     def __init__(self, ridx: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._ridx = ridx
         self.focused = FocusEmitter()
+        self.navigate_prev = FocusEmitter()
+        self.navigate_next = FocusEmitter()
+        self.navigate_page_up = FocusEmitter()
+        self.navigate_page_down = FocusEmitter()
 
     def focusInEvent(self, event) -> None:
         super().focusInEvent(event)
         self.focused.emit(self._ridx)
+
+    def keyPressEvent(self, event) -> None:
+        key = event.key()
+        if key == Qt.Key.Key_Up:
+            self.navigate_prev.emit(self._ridx)
+            return
+        if key == Qt.Key.Key_Down:
+            self.navigate_next.emit(self._ridx)
+            return
+        if key == Qt.Key.Key_PageUp:
+            self.navigate_page_up.emit(self._ridx)
+            return
+        if key == Qt.Key.Key_PageDown:
+            self.navigate_page_down.emit(self._ridx)
+            return
+        super().keyPressEvent(event)
 
 
 class FocusEmitter:
@@ -1009,21 +1165,43 @@ class ReviewChunkLinesController:
                 self._session.set_review_complete(False)
                 self._session.dirty = True
 
-        self._view.setWindowTitle(f'Line review — {paths.chunk_name}')
+        self._view.setWindowTitle(f'Review chunk — {paths.chunk_name}')
         self._view.set_path_labels(paths.raw_path.name, paths.final_path.name)
         self._view.populate_lines(self._session, self)
         self._view.set_review_controls_enabled(True)
-        self._show_line()
+        self._show_line(select_all=True)
         return True
 
-    def _show_line(self) -> None:
+    def _current_page_number(self) -> int | None:
+        line = self._session.line_at_editable_ridx()
+        page_number = line.get('page_number')
+        if isinstance(page_number, int):
+            return page_number
+        return None
+
+    def _has_flagged_before(self, ridx: int) -> bool:
+        s = self._session
+        for i in range(ridx - 1, -1, -1):
+            line = s.lines[s.editable_indices[i]]
+            if line_confidence_label(line) in {'low', 'medium'}:
+                return True
+        return False
+
+    def _has_flagged_after(self, ridx: int) -> bool:
+        s = self._session
+        for i in range(ridx + 1, len(s.editable_indices)):
+            line = s.lines[s.editable_indices[i]]
+            if line_confidence_label(line) in {'low', 'medium'}:
+                return True
+        return False
+
+    def _show_line(self, *, select_all: bool = False) -> None:
         """Refresh left pane + highlight for ``session.editable_ridx`` (ridx).
 
         Uses only persisted ``page_number`` and ``line_box``; no OCR or re-snap at focus time.
         """
         self._session.clamp_editable_ridx()
         s = self._session
-        n_editable = len(s.editable_indices)
         ridx = s.editable_ridx
         line = s.line_at_editable_ridx()
         page_number = line.get('page_number')
@@ -1032,9 +1210,12 @@ class ReviewChunkLinesController:
         else:
             self._view.set_page_image(None)
         self._view.show_active_line_box(line)
-        self._view.set_active_row(ridx)
+        self._view.set_active_row(ridx, select_all=select_all)
         self._view.schedule_align_image_to_active_row(ridx, line)
-        self._view.set_prev_next_enabled(ridx > 0, ridx < n_editable - 1)
+        self._view.set_flagged_nav_enabled(
+            self._has_flagged_before(ridx),
+            self._has_flagged_after(ridx),
+        )
 
     def _on_prev(self) -> None:
         if not self._session.is_loaded or self._session.editable_ridx <= 0:
@@ -1063,6 +1244,54 @@ class ReviewChunkLinesController:
         for ridx in range(start, len(s.editable_indices)):
             line = s.lines[s.editable_indices[ridx]]
             if line_confidence_label(line) in {'low', 'medium'}:
+                s.editable_ridx = ridx
+                self._show_line()
+                return
+
+    def _on_prev_flagged(self) -> None:
+        s = self._session
+        if not s.is_loaded:
+            return
+        start = s.editable_ridx - 1
+        for ridx in range(start, -1, -1):
+            line = s.lines[s.editable_indices[ridx]]
+            if line_confidence_label(line) in {'low', 'medium'}:
+                s.editable_ridx = ridx
+                self._show_line()
+                return
+
+    def _on_page_down(self) -> None:
+        s = self._session
+        if not s.is_loaded:
+            return
+        current = self._current_page_number()
+        if current is None:
+            return
+        for target in range(current + 1, len(s.page_images) + 1):
+            ridx = topmost_editable_ridx_for_page(
+                s.lines,
+                s.editable_indices,
+                target,
+            )
+            if ridx is not None:
+                s.editable_ridx = ridx
+                self._show_line()
+                return
+
+    def _on_page_up(self) -> None:
+        s = self._session
+        if not s.is_loaded:
+            return
+        current = self._current_page_number()
+        if current is None:
+            return
+        for target in range(current - 1, 0, -1):
+            ridx = topmost_editable_ridx_for_page(
+                s.lines,
+                s.editable_indices,
+                target,
+            )
+            if ridx is not None:
                 s.editable_ridx = ridx
                 self._show_line()
                 return
@@ -1193,7 +1422,7 @@ def main(cli: argparse.Namespace | None = None) -> int:
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
-    app.setApplicationName('Line review')
+    app.setApplicationName('Review chunk')
     _ic = _review_app_icon()
     if not _ic.isNull():
         app.setWindowIcon(_ic)

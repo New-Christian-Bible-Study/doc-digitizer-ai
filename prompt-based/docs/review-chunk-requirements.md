@@ -49,7 +49,7 @@ based on implementation behavior.
 
 - Resolved chunk PDF directory must exist; otherwise fail with exit code `1`.
 - At least one `*.pdf` must exist in the chunk directory; otherwise fail with exit code `1`.
-- App name must be set to `Line review`.
+- App name must be set to `Review chunk`.
 - App/window icon should use `icons/review-chunk-lines.png` when present (optional).
 
 ## Core UI Requirements
@@ -63,16 +63,19 @@ based on implementation behavior.
     - Left pane: page image with active line highlight overlay.
     - Right pane: vertically scrollable editable line list.
   - Action row buttons:
-    - `◀ Prev`
-    - `Next ▶`
+    - `Prev flagged`
     - `Next flagged`
     - `Save to final`
-    - `Mark review complete`
     - `Reload from raw`
+    - `Mark review complete` (last)
 - Zoom shortcuts must be supported:
   - `Ctrl+=` / `Ctrl++` zoom in
   - `Ctrl+-` zoom out
   - `Ctrl+0` reset to fit
+- Keyboard navigation shortcuts:
+  - `↑` / `↓` in a line field: previous/next editable line (updates scan highlight)
+  - `Alt+↑` / `Alt+↓`: previous/next line from anywhere in the window
+  - `Page Up` / `Page Down`: previous/next PDF page with editable content; selects the topmost line on that page
 
 ## Chunk Loading and Switching
 
@@ -106,10 +109,15 @@ based on implementation behavior.
 
 ## Navigation and Focus Requirements
 
-- Prev/Next buttons navigate editable lines and must disable at boundaries.
-- Focusing a text row sets that row as active review line.
+- Focusing a text row sets that row as active review line and updates the scan-pane highlight.
+- The active transcription row must have a visible background highlight even when unedited.
+- `↑` / `↓` in a line field navigate to the previous/next editable line and update the scan pane.
+- `Alt+↑` / `Alt+↓` perform the same line navigation when focus is elsewhere in the window.
+- `Page Up` / `Page Down` jump to the previous/next PDF page that has editable lines; the topmost line on that page (smallest `ymin`) is selected. These keys must not scroll the transcription list.
+- `Prev flagged` must jump backward to the previous line with AI confidence `low` or `medium`.
 - `Next flagged` must jump forward to the next line with AI confidence `low` or `medium`.
-- Active row should be focused and selected in the right pane.
+- Prev/Next flagged buttons must disable when no matching line exists in that direction.
+- Active row should be focused in the right pane; text is not select-all on every navigation (only on initial chunk load).
 
 ## Image and Alignment Requirements
 

@@ -29,6 +29,7 @@ pip-wheel-metadata/
 # Environment and local config
 .env
 .env.*
+secrets.env
 
 # IDE/editor settings
 .idea/
@@ -40,3 +41,6 @@ Thumbs.db
 
 # Rendered PDFs next to AsciiDoc in transcriptions (build-transcribed-chunk-pdfs.py)
 **/transcriptions/**/*.pdf
+
+# hybrid personal work folders
+work/

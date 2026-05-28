@@ -1,8 +1,12 @@
 # NCBS Hybrid
 
+
 This is a hybrid approach to OCR. It combines the best of prompt based with traditional to yield the best results. Simply put, this project uses PaddleOCR to detect text lines, then passes those line regions to Gemini for the actual OCR and replacement step, and finally opens an editor for review. This allows for the highest accuracy OCR combined with the highest text line region accuracy, as well as the ability to edit the prompts.
 
 PDF Editing tools have also been added and accessible through the streamlit gui (split pages, reading order, page ranges, etc)
+
+See [Editor README](.\EditorREADME.md) for editor-specific details.
+
 
 - `src\prompts\gemini_system.txt`: base Gemini OCR prompt, change only if issues in the actual OCRing (or change model to a better version).
 - `src\prompts\gemini_user.txt`: user-facing prompt, edit for formatting, headers, page numbers, change gemini comments, etc.

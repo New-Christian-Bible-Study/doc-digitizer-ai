@@ -18,6 +18,93 @@ import gemini_pipe
 
 
 # ---------------------------------------------------------------------
+# Language Options
+# ---------------------------------------------------------------------
+
+LANGUAGE_OPTIONS = {
+    "Abaza": "abq",
+    "Afrikaans": "af",
+    "Albanian": "sq",
+    "Arabic": "ar",
+    "Avaric": "ava",
+    "Azerbaijani": "az",
+    "Belarusian": "be",
+    "Bhojpuri": "bho",
+    "Bihari": "bh",
+    "Bosnian": "bs",
+    "Bulgarian": "bg",
+    "Chechen": "che",
+    "Chinese (Simplified)": "ch",
+    "Chinese (Traditional)": "chinese_cht",
+    "Croatian": "hr",
+    "Czech": "cs",
+    "Danish": "da",
+    "Dargwa": "dar",
+    "Dutch": "nl",
+    "English": "en",
+    "Estonian": "et",
+    "French": "fr",
+    "Georgian": "ka",
+    "German": "de",
+    "Haryanvi": "bgc",
+    "Hindi": "hi",
+    "Hungarian": "hu",
+    "Icelandic": "is",
+    "Indonesian": "id",
+    "Ingush": "inh",
+    "Irish": "ga",
+    "Italian": "it",
+    "Japanese": "japan",
+    "Kabardian": "kbd",
+    "Konkani": "gom",
+    "Korean": "korean",
+    "Kurdish": "ku",
+    "Lak": "lbe",
+    "Latin": "la",
+    "Latvian": "lv",
+    "Lezghian": "lez",
+    "Lithuanian": "lt",
+    "Magahi": "mah",
+    "Maithili": "mai",
+    "Malay": "ms",
+    "Maltese": "mt",
+    "Maori": "mi",
+    "Marathi": "mr",
+    "Mongolian": "mn",
+    "Nepali": "ne",
+    "Newari": "new",
+    "Norwegian": "no",
+    "Occitan": "oc",
+    "Old English": "ang",
+    "Pali": "pi",
+    "Persian": "fa",
+    "Polish": "pl",
+    "Portuguese": "pt",
+    "Romanian": "ro",
+    "Russian": "ru",
+    "Sadri": "sck",
+    "Sanskrit": "sa",
+    "Serbian (Cyrillic)": "rs_cyrillic",
+    "Serbian (Latin)": "rs_latin",
+    "Slovak": "sk",
+    "Slovenian": "sl",
+    "Spanish": "es",
+    "Swahili": "sw",
+    "Swedish": "sv",
+    "Tabassaran": "tab",
+    "Tagalog": "tl",
+    "Tamil": "ta",
+    "Telugu": "te",
+    "Turkish": "tr",
+    "Ukrainian": "uk",
+    "Urdu": "ur",
+    "Uyghur": "ug",
+    "Uzbek": "uz",
+    "Vietnamese": "vi",
+    "Welsh": "cy"
+}
+
+# ---------------------------------------------------------------------
 # Folder roots
 # ---------------------------------------------------------------------
 
@@ -145,14 +232,14 @@ def input_to_page_images(input_path: Path, job_dir: Path, dpi: int = 300) -> lis
 
 
 
-def run_paddle_page_reference(page_image: Path, job_dir: Path) -> Path:
+def run_paddle_page_reference(page_image: Path, job_dir: Path, lang: str) -> Path:
 
     paddle_dir = job_dir / "paddle"
     paddle_dir.mkdir(parents=True, exist_ok=True)
 
     out_json = paddle_dir / f"{page_image.stem}.json"
 
-    out_json = paddle_pipe.run_paddle_page(image_path=page_image, output_json=out_json)
+    out_json = paddle_pipe.run_paddle_page(image_path=page_image, output_json=out_json, lang=lang)
 
     st.write(f"📄 PaddleOCR page image: `{page_image}`")
     st.write(f"📝 Paddle JSON: `{out_json}`")
@@ -219,7 +306,7 @@ def open_editor_reference(job_dir: Path) -> None:
     subprocess.Popen([sys.executable, str(editor_script), str(job_dir)])
 
 
-def run_pipeline_reference(pipeline_input: Path, job_dir: Path, dpi: int) -> None:
+def run_pipeline_reference(pipeline_input: Path, job_dir: Path, dpi: int, lang: str) -> None:
     """
     Page-based pipeline:
 
@@ -250,7 +337,7 @@ def run_pipeline_reference(pipeline_input: Path, job_dir: Path, dpi: int) -> Non
             st.write(f"### Processing page {idx}/{len(page_images)}: `{page_image.name}`")
 
             st.write("#### 1. PaddleOCR")
-            paddle_json = run_paddle_page_reference(page_image, job_dir)
+            paddle_json = run_paddle_page_reference(page_image, job_dir, lang)
 
             st.write("#### 2. Extract compact Gemini payload")
             payload_json = extract_info_page_reference(paddle_json, job_dir)
@@ -313,14 +400,26 @@ def main():
 
     st.divider()
 
-    dpi = st.number_input(
-        "PDF render DPI",
-        min_value=100,
-        max_value=600,
-        value=300,
-        step=50,
-        help="Used when converting PDF pages to images for OCR.",
-    )
+    col1, col2 = st.columns(2)
+    with col1:
+        dpi = st.number_input(
+            "PDF render DPI",
+            min_value=100,
+            max_value=600,
+            value=300,
+            step=50,
+            help="Used when converting PDF pages to images for OCR.",
+        )
+    with col2:
+        lang_names = sorted(list(LANGUAGE_OPTIONS.keys()))
+        default_idx = lang_names.index("English") if "English" in lang_names else 0
+        selected_lang_name = st.selectbox(
+            "OCR Language",
+            options=lang_names,
+            index=default_idx,
+            help="Language model passed into PaddleOCR."
+        )
+        selected_lang_code = LANGUAGE_OPTIONS[selected_lang_name]
 
     st.divider()
 
@@ -341,7 +440,7 @@ def main():
             )
 
             st.success(f"Prepared pipeline image: `{prepared_input}`")
-            run_pipeline_reference(prepared_input, job_dir, dpi=dpi)
+            run_pipeline_reference(prepared_input, job_dir, dpi=dpi, lang=selected_lang_code)
 
         st.stop()
 
@@ -406,7 +505,7 @@ def main():
             )
 
             st.success(f"Prepared pipeline PDF: `{prepared_input}`")
-            run_pipeline_reference(prepared_input, job_dir, dpi=dpi)
+            run_pipeline_reference(prepared_input, job_dir, dpi=dpi, lang=selected_lang_code)
 
         except Exception as e:
             st.error(f"Failed: {e}")

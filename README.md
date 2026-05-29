@@ -2,6 +2,10 @@
 
 This repository hosts more than one approach to digitizing documents (for example, prompt-based LLM transcription and tooling oriented toward other pipelines).
 
+## Hybrid Prompt-based
+
+Usage and information in [`hybrid/`](hybrid/README.md)
+
 ## Prompt-based transcription
 
 Scripts, tests, and detailed usage for the current prompt/Gemini chunk workflow live under [`prompt-based/`](prompt-based/README.md).

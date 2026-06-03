@@ -1,0 +1,9 @@
+
+streamlit
+PyMuPDF
+PyPDF2
+paddleocr
+google-genai
+python-dotenv
+
+paddlepaddle==3.2.0 --index-url https://www.paddlepaddle.org.cn/packages/stable/cpu/

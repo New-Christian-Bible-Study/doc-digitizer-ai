@@ -1,0 +1,1 @@
+Exclude all headers, footers, and page numbers and replace lines with empty (but not removing the line itself)

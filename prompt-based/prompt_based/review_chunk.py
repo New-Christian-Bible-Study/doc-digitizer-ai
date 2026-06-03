@@ -703,12 +703,6 @@ class ReviewMainWindow(QMainWindow):
 
         self._active_line_box_item.setRect(left, top, max(1, right - left), max(1, bottom - top))
         self._active_line_box_item.setVisible(True)
-        # #region agent log
-        import json as _json, time as _time
-        _log_path = '/home/byron/dev/projects/ncbs/doc-digitizer-ai/prompt-based/.cursor/debug-059507.log'
-        _entry = {'sessionId': '059507', 'timestamp': int(_time.time() * 1000), 'location': 'review_chunk.py:show_active_line_box', 'message': 'box rendered', 'data': {'text': line.get('text', '')[:60], 'page': line.get('page_number'), 'line_box': line.get('line_box'), 'pixel_top': top, 'pixel_bottom': bottom}, 'hypothesisId': 'H1'}
-        with open(_log_path, 'a') as _f: _f.write(_json.dumps(_entry) + '\n')
-        # #endregion
 
     def align_image_to_active_row(self, ridx: int, line: dict) -> None:
         """Scroll the page so the highlight lines up with the active line editor vertically."""
@@ -748,12 +742,6 @@ class ReviewMainWindow(QMainWindow):
         vc_y = float(vp.height()) / 2.0
         center_scene_y = anchor_y - (target_viewport_y - vc_y) / m22
         self._page_view.centerOn(current_center.x(), center_scene_y)
-        # #region agent log
-        import json as _json, time as _time
-        _log_path = '/home/byron/dev/projects/ncbs/doc-digitizer-ai/prompt-based/.cursor/debug-059507.log'
-        _entry = {'sessionId': '059507', 'timestamp': int(_time.time() * 1000), 'location': 'review_chunk.py:align_image_to_active_row', 'message': 'align', 'data': {'ridx': ridx, 'target_vp_y': target_viewport_y, 'anchor_y': anchor_y, 'vc_y': vc_y, 'vp_h': vp.height(), 'm22': m22, 'center_scene_y': center_scene_y, 'text': line.get('text', '')[:40]}, 'hypothesisId': 'H-align'}
-        with open(_log_path, 'a') as _f: _f.write(_json.dumps(_entry) + '\n')
-        # #endregion
 
     def schedule_align_image_to_active_row(self, ridx: int, line: dict) -> None:
         """Run alignment after the list scrolls so ``mapTo`` sees the final editor position."""
@@ -1177,12 +1165,6 @@ class ReviewChunkLinesController:
                 self._session.set_review_complete(False)
                 self._session.dirty = True
 
-        # #region agent log
-        import json as _json, time as _time
-        _log_path = '/home/byron/dev/projects/ncbs/doc-digitizer-ai/prompt-based/.cursor/debug-059507.log'
-        _entry = {'sessionId': '059507', 'timestamp': int(_time.time() * 1000), 'location': 'review_chunk.py:_load_chunk', 'message': 'chunk loaded', 'data': {'raw_path': str(paths.raw_path), 'final_path': str(paths.final_path), 'final_exists': paths.final_path.exists()}, 'hypothesisId': 'H1'}
-        with open(_log_path, 'a') as _f: _f.write(_json.dumps(_entry) + '\n')
-        # #endregion
         self._view.setWindowTitle(f'Review chunk — {paths.chunk_name}')
         self._view.set_path_labels(paths.raw_path.name, paths.final_path.name)
         self._view.populate_lines(self._session, self)

@@ -295,9 +295,9 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 842,
+        "ymin": 863,
         "xmin": 215,
-        "ymax": 855,
+        "ymax": 877,
         "xmax": 819
       }
     },
@@ -679,9 +679,9 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 829,
+        "ymin": 855,
         "xmin": 239,
-        "ymax": 842,
+        "ymax": 867,
         "xmax": 820
       }
     },

@@ -16,6 +16,20 @@ that every new ``*_raw.json`` already has the best achievable box geometry.
 
 The standalone CLI script ``tests/fix_pathological_boxes.py`` uses the same
 functions to repair existing JSON files on disk.
+
+Known limits
+------------
+Two failure modes resist repair:
+
+* **Consecutive-line Paddle merges (large h)**: when Paddle merges 3+ consecutive
+  transcript lines into a single detection, all those lines share nearly identical
+  boxes.  Case B re-snaps each one below the previous, but snap-to-ink may not
+  find a distinct ink band between tightly-spaced lines in old typography.
+
+* **Irrecoverable tiny boxes (h < 12)**: snap-to-ink already failed once to
+  produce a valid band; ``_snap_below`` often returns the same degenerate result.
+  These lines stay nested; the reviewer will typically find the correct line
+  within one or two lines of the displayed box.
 """
 
 from __future__ import annotations
@@ -72,6 +86,19 @@ def _nesting(a: dict, b: dict) -> float:
 
 def _norm_box(lb: dict) -> list[int]:
     return [int(lb['ymin']), int(lb['xmin']), int(lb['ymax']), int(lb['xmax'])]
+
+
+def _ink_at(gray_img: Image.Image, lb: dict, g: float, pw: int, ph: int) -> float:
+    """Fraction of dark pixels in the normalized box region."""
+    left = max(0, int(round(lb['xmin'] / g * pw)))
+    top = max(0, int(round(lb['ymin'] / g * ph)))
+    right = min(pw, int(round(lb['xmax'] / g * pw)))
+    bottom = min(ph, int(round(lb['ymax'] / g * ph)))
+    if right <= left or bottom <= top:
+        return 0.0
+    data = gray_img.crop((left, top, right, bottom)).getdata()
+    n = len(data)
+    return sum(1 for p in data if p < SNAP_DARK_PIXEL_THRESHOLD) / n if n else 0.0
 
 
 def _snap_below(page_image: Image.Image, anchor_norm: list[int], min_top_px: int) -> dict | None:
@@ -340,7 +367,6 @@ def sweep_repair_page(
     _, page_h = page_image.size
     repairs = existing_repairs
     MIN_SNAP_H = 5   # normalized units; reject degenerate snap results
-    pn = page_lines[start_pos].get('page_number') if start_pos < len(page_lines) else None
 
     # IDs already repaired by Pass 1 (repair_page) – the sweep must NOT re-snap
     # these; they are already in their correct positions.  We do advance the
@@ -488,6 +514,57 @@ def repair_pathological_boxes(chunk_path: Path, lines: list[dict]) -> int:
                 prev_bottom_px = int(round(floor_lb['ymax'] / g * page_h))
                 sweep_repair_page(page_image, plines, pos + 1, prev_bottom_px, repairs)
                 break
+
+        # Revert sweep changes that introduce regressions in two forms:
+        #
+        # A) Nesting regressions: lines that were clean before but are now ≥75%
+        #    nested inside a neighbour.  Iterated until stable (each revert can
+        #    expose a masked regression in the next line).
+        #
+        # B) Ink regressions: cascade-displaced lines whose new position has
+        #    significantly less ink than their original position, indicating the
+        #    sweep overshot into an inter-line gap or empty region.
+        if repairs:
+            orig_path_ids = pathological_set_by_page[pn]
+
+            # B: ink regression revert — cascade lines whose new position has
+            # significantly less ink than the original (sweep overshot an inter-line
+            # gap).  Run first so the nesting revert can react to the reverted set.
+            INK_REVERT_RATIO = 0.50
+            INK_REVERT_MIN_ORIG = 0.04  # skip if original was already very low-ink
+            gray_img = page_image.convert('L')
+            gf = float(BOX_2D_NORMALIZED_MAX)
+            pw, ph = page_image.size
+            for line in plines:
+                if id(line) in orig_path_ids or id(line) not in repairs:
+                    continue
+                orig_lb = _lb(line)
+                if orig_lb is None:
+                    continue
+                orig_ink = _ink_at(gray_img, orig_lb, gf, pw, ph)
+                if orig_ink < INK_REVERT_MIN_ORIG:
+                    continue  # original was low-ink too; no clear degradation
+                new_ink = _ink_at(gray_img, repairs[id(line)], gf, pw, ph)
+                if new_ink < INK_REVERT_RATIO * orig_ink:
+                    repairs.pop(id(line), None)
+
+            # A: nesting regression revert (iterative — must run after ink revert
+            # since ink reverts can expose new nesting conflicts).
+            for _ in range(len(plines)):
+                shadow = [
+                    {**line, 'line_box': repairs.get(id(line), line.get('line_box'))}
+                    for line in plines
+                ]
+                new_regressions = [
+                    line
+                    for pos2, line in enumerate(plines)
+                    if pos2 in set(find_pathological(shadow))
+                    and id(line) not in orig_path_ids
+                ]
+                if not new_regressions:
+                    break
+                for line in new_regressions:
+                    repairs.pop(id(line), None)
 
         for line in plines:
             if id(line) in repairs:

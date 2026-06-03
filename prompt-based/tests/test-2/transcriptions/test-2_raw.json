@@ -91,18 +91,6 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
-        "ymin": 184,
-        "xmin": 363,
-        "ymax": 198,
-        "xmax": 637
-      }
-    },
-    {
-      "page_number": 1,
-      "text": "window with the transcription so",
-      "ai_confidence_label": "high",
-      "ai_notes": "",
-      "line_box": {
         "ymin": 201,
         "xmin": 363,
         "ymax": 215,
@@ -111,7 +99,7 @@
     },
     {
       "page_number": 1,
-      "text": "that each line in both windows",
+      "text": "window with the transcription so",
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
@@ -123,7 +111,7 @@
     },
     {
       "page_number": 1,
-      "text": "can be directly compared.",
+      "text": "that each line in both windows",
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
@@ -131,6 +119,18 @@
         "xmin": 363,
         "ymax": 248,
         "xmax": 570
+      }
+    },
+    {
+      "page_number": 1,
+      "text": "can be directly compared.",
+      "ai_confidence_label": "high",
+      "ai_notes": "",
+      "line_box": {
+        "ymin": 270,
+        "xmin": 368,
+        "ymax": 278,
+        "xmax": 631
       }
     },
     {
@@ -161,7 +161,7 @@
       "page_number": 1,
       "text": "as needed so that it no preservation",
       "ai_confidence_label": "high",
-      "ai_notes": "De-hyphenated 'preservation' by pulling 'ation' from the next line.",
+      "ai_notes": "Joined with hyphenated part from next line",
       "line_box": {
         "ymin": 298,
         "xmin": 361,
@@ -173,7 +173,7 @@
       "page_number": 1,
       "text": "of the hyphen is done.",
       "ai_confidence_label": "high",
-      "ai_notes": "First part of the line ('ation') was moved to the previous line due to de-hyphenation rules.",
+      "ai_notes": "Prefix part joined to previous line",
       "line_box": {
         "ymin": 315,
         "xmin": 360,

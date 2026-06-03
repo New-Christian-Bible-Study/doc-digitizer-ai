@@ -747,12 +747,17 @@ def transcribe_single_chunk(
         return 1
 
     from prompt_based.paddle_line_boxes import assign_paddle_line_boxes
+    from prompt_based.box_repair import repair_pathological_boxes
 
     # Pass 1 leaves anchor_box_2d on each line; this step writes final line_box geometry
     # (Paddle when IoU confident, else snap-to-ink) and strips anchors before raw JSON save.
     paddle_warn = assign_paddle_line_boxes(chunk_path, llm_payload['lines'])
     if paddle_warn is not None:
         print(f'Warning: {paddle_warn}', file=sys.stderr)
+
+    repaired = repair_pathological_boxes(chunk_path, llm_payload['lines'])
+    if repaired:
+        print(f'Box repair: fixed {repaired} pathological line box(es)')
 
     payload = build_disk_transcription_payload(llm_payload, transcribe_config)
 

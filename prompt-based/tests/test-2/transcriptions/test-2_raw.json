@@ -139,6 +139,18 @@
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
+        "ymin": 265,
+        "xmin": 361,
+        "ymax": 279,
+        "xmax": 637
+      }
+    },
+    {
+      "page_number": 1,
+      "text": "test that hyphenation is removed",
+      "ai_confidence_label": "high",
+      "ai_notes": "",
+      "line_box": {
         "ymin": 282,
         "xmin": 361,
         "ymax": 297,
@@ -147,9 +159,9 @@
     },
     {
       "page_number": 1,
-      "text": "test that hyphenation is removed",
+      "text": "as needed so that it no preservation",
       "ai_confidence_label": "high",
-      "ai_notes": "",
+      "ai_notes": "De-hyphenated 'preservation' by pulling 'ation' from the next line.",
       "line_box": {
         "ymin": 298,
         "xmin": 361,
@@ -159,26 +171,14 @@
     },
     {
       "page_number": 1,
-      "text": "as needed so that it no preservation",
+      "text": "of the hyphen is done.",
       "ai_confidence_label": "high",
-      "ai_notes": "Hyphenated word joined across line break.",
+      "ai_notes": "First part of the line ('ation') was moved to the previous line due to de-hyphenation rules.",
       "line_box": {
         "ymin": 315,
         "xmin": 360,
         "ymax": 330,
         "xmax": 586
-      }
-    },
-    {
-      "page_number": 1,
-      "text": "of the hyphen is done.",
-      "ai_confidence_label": "high",
-      "ai_notes": "",
-      "line_box": {
-        "ymin": 321,
-        "xmin": 342,
-        "ymax": 327,
-        "xmax": 500
       }
     }
   ],

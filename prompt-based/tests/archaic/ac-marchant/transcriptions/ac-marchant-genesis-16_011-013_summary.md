@@ -1,10 +1,10 @@
 # AI transcription summary
 
-- Chunk file: `test-2.pdf`
-- Total pages: `1`
-- Confidence score: `1.0`
+- Chunk file: `ac-marchant-genesis-16_011-013.pdf`
+- Total pages: `3`
+- Confidence score: `0.98`
 - Confidence label: `high`
-- Number of notes: `2`
+- Number of notes: `1`
 ## Transcribe config used
 
 ```json

@@ -2,7 +2,7 @@
 
 - Chunk file: `test-2.pdf`
 - Total pages: `1`
-- Confidence score: `0.99`
+- Confidence score: `1.0`
 - Confidence label: `high`
 - Number of notes: `2`
 ## Transcribe config used

@@ -2,19 +2,6 @@ name: Build Review Chunk Executable
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - review-chunk-exe
-    paths:
-      - 'prompt-based/**'
-      - 'requirements.txt'
-      - '.github/workflows/review-chunk-executable.yml'
-  pull_request:
-    paths:
-      - 'prompt-based/**'
-      - 'requirements.txt'
-      - '.github/workflows/review-chunk-executable.yml'
 
 jobs:
   build-review-chunk:

@@ -45,6 +45,7 @@ def run_gemini_page(image_path: Path, payload_json: Path, output_json: Path) -> 
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+            response_mime_type='application/json'
         ),
     )
 

@@ -57,8 +57,20 @@ streamlit run src\app.py
 - Do not commit `secrets.env` to version control.
 - Edit `secrets.env` with your own API key and settings before running.
 
+
+## Known Issues
+
+- Scripts with large gaps has trouble detecting whole lines
+
 ## Todo
 
-- Clear GPU support instructions
-- PDF viewer before OCR in GUI
-- Cleaning up GUI options
+- [ ] Clear GPU support instructions
+- [ ] PDF viewer before OCR in GUI
+- [ ] Cleaning up GUI options
+- [ ] regedit in editor
+- [x] fix merge hyphens / line feeds
+- [ ] right-to-left reading order
+- [ ] Italics
+- [x] Serif font option
+- [ ] Page feeding system
+- [ ] Write simple script to merge gaps in lines

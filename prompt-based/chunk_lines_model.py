@@ -466,8 +466,19 @@ def _moving_average(values: list[int], radius: int) -> list[float]:
     return out
 
 
-def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | None:
-    """Snap model ``box_2d`` to nearest visible text band using a local projection profile."""
+def snap_box_2d_to_ink(
+    page_image: Image.Image,
+    box_2d: object,
+    *,
+    min_search_top_px: int | None = None,
+) -> list[int] | None:
+    """Snap model ``box_2d`` to nearest visible text band using a local projection profile.
+
+    ``min_search_top_px`` floors the search window in pixel space so the result cannot
+    land above the bottom edge of the previously assigned line.  When the floor clips
+    the upward portion of the margin, the downward margin is extended by the same amount
+    to preserve the total window height.
+    """
     # Driver (motivation is in the module comment above SNAP_* constants):
     # - Build a 1D "projection profile": per-row dark-pixel counts in a strip that
     #   spans the model's x-range and only a limited y-range around the box center.
@@ -503,8 +514,14 @@ def snap_box_2d_to_ink(page_image: Image.Image, box_2d: object) -> list[int] | N
     # Search locally around the model anchor. Keeping this local avoids snapping to
     # neighboring paragraphs when the page has dense text.
     search_margin = max(SNAP_SEARCH_MARGIN_MIN_PX, box_h // SNAP_SEARCH_MARGIN_BOX_H_DIVISOR)
-    search_top = max(0, anchor_y - search_margin)
-    search_bottom = min(height, anchor_y + search_margin)
+    ideal_top = max(0, anchor_y - search_margin)
+    if min_search_top_px is not None and min_search_top_px > ideal_top:
+        top_clipped = min_search_top_px - ideal_top
+        search_top = min_search_top_px
+        search_bottom = min(height, anchor_y + search_margin + top_clipped)
+    else:
+        search_top = ideal_top
+        search_bottom = min(height, anchor_y + search_margin)
     if search_bottom <= search_top:
         return None
 

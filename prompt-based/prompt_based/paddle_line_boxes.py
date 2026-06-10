@@ -363,8 +363,13 @@ def _set_line_box_from_anchor(
     page_image: Image.Image,
     line: dict,
     anchor_norm: list[int],
+    min_search_top_px: int | None = None,
 ) -> None:
-    snapped = snap_box_2d_to_ink(page_image, anchor_norm)
+    snapped = snap_box_2d_to_ink(
+        page_image,
+        anchor_norm,
+        min_search_top_px=min_search_top_px,
+    )
     line_aabb_norm = snapped if snapped is not None else anchor_norm
     line['line_box'] = line_box_dict_from_normalized_aabb(
         [
@@ -393,6 +398,8 @@ def assign_line_boxes_for_page(
         detect_page_aabbs_px(page_image),
     )
     used_detection_indices: set[int] = set()
+    prev_lower_px: int | None = None
+    g = float(BOX_2D_NORMALIZED_MAX)
     for _idx, line in page_lines:
         anchor_norm = _parse_anchor_norm(line.get('anchor_box_2d'))
         anchor_px = _anchor_norm_to_pixel_rect(anchor_norm, page_w, page_h)
@@ -404,7 +411,22 @@ def assign_line_boxes_for_page(
             det = detections_px[chosen]
             line['line_box'] = pixel_aabb_to_line_box(det[0], det[1], det[2], det[3], page_w, page_h)
         else:
-            _set_line_box_from_anchor(page_image, line, anchor_norm)
+            # When the Paddle match failed, constrain snap-to-ink to start below the
+            # previous line's bottom so we don't lock onto its ink band.
+            _set_line_box_from_anchor(
+                page_image,
+                line,
+                anchor_norm,
+                min_search_top_px=prev_lower_px,
+            )
+        lb = line.get('line_box')
+        if isinstance(lb, dict):
+            try:
+                new_lower = int(round(int(lb['ymax']) / g * page_h))
+                if prev_lower_px is None or new_lower > prev_lower_px:
+                    prev_lower_px = new_lower
+            except (KeyError, TypeError, ValueError):
+                pass
         line.pop('anchor_box_2d', None)
 
 

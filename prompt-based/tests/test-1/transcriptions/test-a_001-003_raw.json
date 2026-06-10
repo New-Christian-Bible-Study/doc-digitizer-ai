@@ -15,7 +15,7 @@
     },
     {
       "page_number": 1,
-      "text": "== Page 1",
+      "text": "=== Page 1",
       "ai_confidence_label": "high",
       "ai_notes": "",
       "line_box": {
@@ -86,7 +86,7 @@
       }
     }
   ],
-  "confidence_score": 0.99,
+  "confidence_score": 1.0,
   "confidence_label": "high",
   "model": "gemini/gemini-3.1-pro-preview",
   "configuration": "temperature=1.0, media_resolution=high, reasoning_effort=medium"

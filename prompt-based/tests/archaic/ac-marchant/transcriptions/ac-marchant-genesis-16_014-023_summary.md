@@ -1,10 +1,10 @@
 # AI transcription summary
 
-- Chunk file: `test-2.pdf`
-- Total pages: `1`
-- Confidence score: `1.0`
+- Chunk file: `ac-marchant-genesis-16_014-023.pdf`
+- Total pages: `10`
+- Confidence score: `0.98`
 - Confidence label: `high`
-- Number of notes: `2`
+- Number of notes: `0`
 ## Transcribe config used
 
 ```json
@@ -50,6 +50,10 @@ Also include top-level fields `confidence_score` and `confidence_label` exactly 
     - **Character Conversion:** Convert the historical "long s" (`ſ`) to a standard `s`.
     - **Initial Capitals:** Convert paragraph-starting ALL CAPS words to Sentence case.
 
-**Ignore:** Running heads, ornaments, signature marks, and catchwords.
+**Ignore (Do not transcribe):** 
+- Running heads (titles at the very top of pages).
+- Ornaments and decorative horizontal bars.
+- Signature marks and page numbers in the bottom margin (e.g., "A 2", "23181").
+- Catchwords (the single word at the far bottom-right corner that anticipates the next page).
 
 ````

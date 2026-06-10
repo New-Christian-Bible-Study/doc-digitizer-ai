@@ -1,26 +1,3 @@
-# AI transcription summary
-
-- Chunk file: `test-2.pdf`
-- Total pages: `1`
-- Confidence score: `1.0`
-- Confidence label: `high`
-- Number of notes: `2`
-## Transcribe config used
-
-```json
-{
-  "model": "gemini/gemini-3.1-pro-preview",
-  "timeout_seconds": 900,
-  "temperature": 1.0,
-  "reasoning_effort": "medium",
-  "media_resolution": "high",
-  "sys_instructions": "Respond with JSON only matching the provided schema. Key order: lines, confidence_score, confidence_label. The \"lines\" array must contain one object per visible text line in reading order; each object has page_number (integer, 1-based within this chunk), text (string), anchor_box_2d (four integers [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates as a coarse layout hint for matching only), ai_confidence_label ('low'|'medium'|'high'), and ai_notes (string). When a line ai_confidence_label is 'low', that line's ai_notes must be non-empty and describe the specific ambiguity for that line. For medium/high lines, ai_notes may be empty unless there is useful context. confidence_score must be a number from 0.0 to 1.0. Top-level confidence_label must be one of: 'low', 'medium', 'high'. Strictly avoid general descriptions of the document or praise for formatting."
-}
-```
-
-## Prompt used
-
-````markdown
 # Transcription & Spatial Detection Instructions (Chunk Mode)
 
 **Role:** Archival Transcription Assistant with Spatial Awareness.
@@ -50,6 +27,8 @@ Also include top-level fields `confidence_score` and `confidence_label` exactly 
     - **Character Conversion:** Convert the historical "long s" (`ſ`) to a standard `s`.
     - **Initial Capitals:** Convert paragraph-starting ALL CAPS words to Sentence case.
 
-**Ignore:** Running heads, ornaments, signature marks, and catchwords.
-
-````
+**Ignore (Do not transcribe):** 
+- Running heads (titles at the very top of pages).
+- Ornaments and decorative horizontal bars.
+- Signature marks and page numbers in the bottom margin (e.g., "A 2", "23181").
+- Catchwords (the single word at the far bottom-right corner that anticipates the next page).

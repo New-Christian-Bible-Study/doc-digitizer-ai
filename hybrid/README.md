@@ -11,7 +11,20 @@ See [Editor README](.\EditorREADME.md) for editor-specific details.
 - `src\prompts\gemini_system.txt`: base Gemini OCR prompt, change only if issues in the actual OCRing (or change model to a better version).
 - `src\prompts\gemini_user.txt`: user-facing prompt, edit for formatting, headers, page numbers, change gemini comments, etc.
 
-## Quick start
+## Quickstart
+
+1. Run the bundled setup then start the app:
+
+```bat
+setup.bat
+run.bat
+```
+
+This runs the repository's setup (creates/activates a venv, installs dependencies, and configures secrets) and then launches the app.
+
+## Manual setup
+
+If you prefer to set things up manually, follow these steps.
 
 1. Create and activate a Python virtual environment:
 
@@ -60,7 +73,7 @@ streamlit run src\app.py
 
 ## Known Issues
 
-- Scripts with large gaps has trouble detecting whole lines
+- Scripts with large gaps/spaces in each line has trouble detecting whole lines
 
 ## Todo
 
@@ -69,8 +82,9 @@ streamlit run src\app.py
 - [ ] Cleaning up GUI options
 - [ ] regedit in editor
 - [x] fix merge hyphens / line feeds
+- [x] Added easier setup/run bat files
 - [ ] right-to-left reading order
 - [ ] Italics
 - [x] Serif font option
-- [ ] Page feeding system
+- [x] Page feeding system (Has error checking now, so will continue even if a page fails)
 - [ ] Write simple script to merge gaps in lines

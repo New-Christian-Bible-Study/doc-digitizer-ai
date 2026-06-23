@@ -9,6 +9,8 @@ import fitz  # PyMuPDF
 import streamlit as st
 import os
 from dotenv import load_dotenv
+import json
+import traceback
 
 from pdf_tools.extract_pdf_page_range import extract_page_range
 from pdf_tools.split_double_page_pdf import split_double_page_pdf
@@ -331,26 +333,56 @@ def run_pipeline_reference(pipeline_input: Path, job_dir: Path, dpi: int, lang: 
         st.write(f"Created `{len(page_images)}` page image(s).")
 
         merged_outputs = []
+        failures = []
 
         for idx, page_image in enumerate(page_images, start=1):
             st.write("---")
             st.write(f"### Processing page {idx}/{len(page_images)}: `{page_image.name}`")
 
-            st.write("#### 1. PaddleOCR")
-            paddle_json = run_paddle_page_reference(page_image, job_dir, lang)
+            try:
+                st.write("#### 1. PaddleOCR")
+                paddle_json = run_paddle_page_reference(page_image, job_dir, lang)
 
-            st.write("#### 2. Extract compact Gemini payload")
-            payload_json = extract_info_page_reference(paddle_json, job_dir)
+                st.write("#### 2. Extract compact Gemini payload")
+                payload_json = extract_info_page_reference(paddle_json, job_dir)
 
-            st.write("#### 3. Gemini OCR")
-            gemini_json = run_gemini_page_reference(page_image, payload_json, job_dir)
+                st.write("#### 3. Gemini OCR")
+                gemini_json = run_gemini_page_reference(page_image, payload_json, job_dir)
 
-            st.write("#### 4. Merge Gemini response into Paddle JSON")
-            merged_json = merge_page_reference(paddle_json, gemini_json, job_dir)
+                st.write("#### 4. Merge Gemini response into Paddle JSON")
+                merged_json = merge_page_reference(paddle_json, gemini_json, job_dir)
 
-            merged_outputs.append(merged_json)
+                merged_outputs.append(merged_json)
+
+            except Exception as e:
+                tb = traceback.format_exc()
+                failures.append({
+                    "page_index": idx,
+                    "page_name": page_image.name,
+                    "error": str(e),
+                    "traceback": tb,
+                })
+
+                st.error(f"Failed processing page {idx}: `{page_image.name}` — {e}")
+                st.write("```")
+                st.text(tb)
+                st.write("```")
+                # continue to next page
 
         st.write("---")
+
+        # Save failures.json if any failures occurred and offer download
+        if failures:
+            failures_file = job_dir / "failures.json"
+            try:
+                with failures_file.open("w", encoding="utf-8") as fh:
+                    json.dump(failures, fh, indent=2, ensure_ascii=False)
+
+                st.warning(f"{len(failures)} page(s) failed during processing. Saved: `{failures_file}`")
+
+            except Exception as e:
+                st.error(f"Failed to write failures.json: {e}")
+
         st.write("### 5. Open editor")
         open_editor_reference(job_dir)
 
